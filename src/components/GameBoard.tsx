@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameStateResponse, CardType, PlayerType } from '../types.ts';
 import { CardVisual } from './CardVisual.tsx';
-import { VoiceRoom } from './VoiceRoom.tsx';
+import { VoiceRoom, VideoPlayer } from './VoiceRoom.tsx';
 import { 
   calculateDetailedScoreBreakdown,
   isValidPureSequence,
@@ -1277,7 +1277,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               const currentBreakdown = calculateDetailedScoreBreakdown(currentHandGroupsCards, game.wildCardRank, game.wildCardSuit);
               const currentPenalty = currentBreakdown.penaltyPoints;
               return (
-                <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-extrabold flex items-center gap-1.5">
+                <span className="text-[10px] font-mono text-white/90 uppercase tracking-widest font-extrabold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-505 animate-pulse" /> Cards in Hand ({myHandCards.length}) - Current Points: {currentPenalty}
                 </span>
               );
@@ -1468,6 +1468,40 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Below Table Camera Boxes */}
+            {game.status === 'playing' && Object.keys(playerStreams).length > 0 && (
+              <div className="w-full max-w-4xl mx-auto flex flex-wrap justify-center gap-4 py-8">
+                {players.map(p => {
+                  const pStream = playerStreams[p.id];
+                  // Only render if they are broadcasting video OR they are the local player
+                  if (!pStream || !pStream.stream) return null;
+                  if (!pStream.videoEnabled) return null;
+
+                  const isLocal = p.id === viewerPlayerId;
+                  
+                  return (
+                    <div key={p.id} className="relative w-40 h-52 sm:w-48 sm:h-64 rounded-2xl overflow-hidden shadow-2xl shadow-black/50 border border-slate-700/50 bg-slate-900 group">
+                      <VideoPlayer stream={pStream.stream} isLocal={isLocal} />
+                      
+                      <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-slate-950/90 to-transparent">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full shadow-sm ${pStream.speaking ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+                          <span className="text-white font-sans font-black tracking-wider text-sm drop-shadow-md">
+                            {p.username} {isLocal && <span className="text-slate-400 text-[10px] ml-1">YOU</span>}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {pStream.speaking && (
+                        <div className="absolute inset-0 rounded-2xl border-2 border-emerald-500/50 pointer-events-none" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
           </div>
         ) : (
             <div className="flex flex-col gap-6">
