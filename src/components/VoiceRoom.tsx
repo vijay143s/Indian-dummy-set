@@ -235,10 +235,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     const handleVoiceRoomState = (data: Record<number, { muted: boolean; speaking: boolean; videoEnabled?: boolean; socketId: string; username: string }>) => {
       const mapping: Record<string, number> = {};
       
+      // Populate mapping synchronously
+      Object.entries(data).forEach(([pIdStr, srvPeer]) => {
+        mapping[srvPeer.socketId] = parseInt(pIdStr, 10);
+      });
+      setSocketToPlayerId(mapping);
+
       setPeers(prev => {
         const nextPeers = { ...prev };
         Object.entries(data).forEach(([pIdStr, srvPeer]) => {
-          mapping[srvPeer.socketId] = parseInt(pIdStr, 10);
           if (srvPeer.socketId === socket.id) return;
           
           nextPeers[srvPeer.socketId] = {
@@ -261,8 +266,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
         return nextPeers;
       });
-
-      setSocketToPlayerId(mapping);
     };
 
     // Hook listeners
