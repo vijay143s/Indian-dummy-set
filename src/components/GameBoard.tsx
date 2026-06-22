@@ -1083,10 +1083,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               )}
             </div>
 
-            {/* Rummy Table Top Row: Opponents */}
-            {game.status === 'playing' || ((game.status === 'round_finished' || game.status === 'finished') && hideRoundSummary) ? (
-              <div className="flex flex-row justify-center items-center gap-4 sm:gap-6 flex-wrap w-full z-10">
-                {sortedPlayers.filter(p => p.id !== viewerPlayerId).map(p => {
+            {/* Rummy Table Top Row: All Players */}
+            {game.status === 'toss' || game.status === 'toss_reveal' || game.status === 'playing' || ((game.status === 'round_finished' || game.status === 'finished') && hideRoundSummary) ? (
+              <div className="flex flex-row justify-center items-center gap-4 sm:gap-6 flex-wrap w-full z-10 pt-10">
+                {sortedPlayers.map(p => {
                 const isTurn = game.currentTurnPlayerId === p.id && game.status === 'playing';
                 const remainingHandCount = cards.filter(c => c.ownerPlayerId === p.id && c.location === 'hand').length;
                 
@@ -1097,8 +1097,28 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 return (
                   <div 
                     key={p.id}
-                    className="flex flex-col items-center relative transition-transform duration-300 hover:scale-105"
+                    className="flex flex-col items-center relative transition-transform duration-300 hover:scale-105 mt-2"
                   >
+                    {/* Toss Card Rendering */}
+                    {(game.status === 'toss' || game.status === 'toss_reveal') && (
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 scale-75 origin-bottom z-20">
+                        {(() => {
+                          const tCard = cards.find(c => c.ownerPlayerId === p.id && c.location === 'toss');
+                          if (!tCard) return <div className="w-10 h-14 border-2 border-dashed border-slate-700/50 rounded-lg bg-slate-900/30" />;
+                          if (game.status === 'toss') return (
+                            <div className="w-10 h-14 rounded-lg bg-gradient-to-br from-indigo-700 to-indigo-900 border border-indigo-400/40 shadow-xl flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                              <span className="text-white/50 text-[10px] font-mono font-bold">DS</span>
+                            </div>
+                          );
+                          return (
+                            <div className="animate-in flip-in-y duration-500 shadow-2xl">
+                              <CardVisual card={tCard} size="sm" />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     <div className="relative">
                       {/* Avatar frame */}
                       <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full ${avatarColor} flex items-center justify-center border-2 border-slate-900 shadow-md ${
@@ -1109,27 +1129,29 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                         </span>
                       </div>
                       
-                      {/* Remaining Card badge / score */}
-                      <div className="absolute -top-1 -right-1 bg-slate-950 border border-slate-800 text-[9px] sm:text-[10px] font-black text-amber-405 font-mono w-5 h-5 rounded-full flex items-center justify-center shadow-md">
-                        {remainingHandCount}
-                      </div>
+                      {/* Remaining Card badge / score (only in playing) */}
+                      {game.status === 'playing' && (
+                        <div className="absolute -top-1 -right-1 bg-slate-950 border border-slate-800 text-[9px] sm:text-[10px] font-black text-amber-405 font-mono w-5 h-5 rounded-full flex items-center justify-center shadow-md">
+                          {remainingHandCount}
+                        </div>
+                      )}
 
                       <span className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full ${p.isOnline ? 'bg-emerald-500 shadow-sm shadow-emerald-400' : 'bg-rose-500'}`} />
                     </div>
 
                     {/* Username pill */}
-                    <span className={`mt-1.5 px-2 py-0.5 rounded-full text-[8.5px] sm:text-[9.5px] font-mono font-bold border ${
+                    <span className={`mt-1.5 px-2 py-0.5 rounded-full text-[8.5px] sm:text-[9.5px] font-mono font-bold border flex items-center gap-1 ${
                       isTurn 
                         ? 'bg-emerald-500/15 border-emerald-505 text-emerald-400' 
                         : 'bg-slate-950/80 border-slate-800 text-slate-350'
                     }`}>
-                      {p.username}
+                      {p.username} {p.id === viewerPlayerId && <span className="text-[8px] text-slate-500 font-bold">(YOU)</span>}
                     </span>
                   </div>
                 );
               })}
-                {sortedPlayers.filter(p => p.id !== viewerPlayerId).length === 0 && (
-                  <p className="text-xs font-mono text-purple-300/60 uppercase">Waiting for opponents to sit down...</p>
+                {sortedPlayers.length === 0 && (
+                  <p className="text-xs font-mono text-purple-300/60 uppercase">Waiting for players to sit down...</p>
                 )}
               </div>
             ) : null}

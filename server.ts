@@ -387,8 +387,8 @@ async function startServer() {
           .set({ location: 'toss', ownerPlayerId: pId })
           .where(eq(cards.id, selectedCard.id));
 
-        const players = await getGamePlayers(gId);
-        const activePlayers = players.filter(p => p.isOnline && !p.isEliminated);
+        const gamePlayers = await getGamePlayers(gId);
+        const activePlayers = gamePlayers.filter(p => p.isOnline && !p.isEliminated);
         
         // Count toss cards
         const allTossCards = await db.select().from(cards).where(and(eq(cards.gameId, gId), eq(cards.location, 'toss')));
@@ -404,43 +404,54 @@ async function startServer() {
             return parseInt(r) || 15;
           };
 
-          let lowestCard = allTossCards[0];
-          let lowestWeight = rankWeight(lowestCard.rank);
+          // Sort toss cards from highest rank to lowest rank
+          const sortedTossCards = [...allTossCards].sort((a, b) => rankWeight(b.rank) - rankWeight(a.rank));
 
-          for (let i = 1; i < allTossCards.length; i++) {
-            const w = rankWeight(allTossCards[i].rank);
-            if (w < lowestWeight) {
-              lowestWeight = w;
-              lowestCard = allTossCards[i];
-            }
+          // Highest card (index 0) gets first turn. Lowest card (last index) is dealer.
+          const firstPlayerId = sortedTossCards[0].ownerPlayerId!;
+          const dealerId = sortedTossCards[sortedTossCards.length - 1].ownerPlayerId!;
+
+          // Update turn orders for all active players based on sortedTossCards
+          for (let i = 0; i < sortedTossCards.length; i++) {
+            await db.update(players)
+              .set({ turnOrder: i })
+              .where(eq(players.id, sortedTossCards[i].ownerPlayerId!));
           }
 
-          const dealerId = lowestCard.ownerPlayerId!;
+          // Change state to toss_reveal so clients can show the cards
+          await updateGame(gId, { status: 'toss_reveal' });
+          await saveGameEvent(gId, dealerId, 'toss_completed', { dealerId, lowestRank: sortedTossCards[sortedTossCards.length - 1].rank });
+          
+          callback({ success: true });
+          await computeAndBroadcastGameState(gId);
 
-          // Wait a brief moment to broadcast the picks before transitioning, but server is authoritative so just transition
-          await updateGame(gId, {
-            status: 'playing',
-            dealerPlayerId: dealerId,
-            currentTurnPlayerId: dealerId
-          });
+          // Wait 5 seconds for clients to see the toss cards, then start game
+          setTimeout(async () => {
+            await updateGame(gId, {
+              status: 'playing',
+              dealerPlayerId: dealerId,
+              currentTurnPlayerId: firstPlayerId
+            });
 
-          // Reshuffle and deal exactly 13 cards to everyone
-          await setupGameDeck(gId);
-          for (const p of activePlayers) {
-            for (let i = 0; i < 13; i++) {
-              await drawCardFromDeck(gId, p.id);
+            // Reshuffle and deal exactly 13 cards to everyone
+            await setupGameDeck(gId);
+            for (const p of activePlayers) {
+              for (let i = 0; i < 13; i++) {
+                await drawCardFromDeck(gId, p.id);
+              }
             }
-          }
 
-          // Open discard
-          const openCard = await drawCardFromDeck(gId, dealerId);
-          await discardCard(gId, dealerId, openCard.id);
+            // Open discard
+            const openCard = await drawCardFromDeck(gId, dealerId);
+            await discardCard(gId, dealerId, openCard.id);
 
-          await saveGameEvent(gId, dealerId, 'toss_completed', { dealerId, lowestRank: lowestCard.rank });
+            await computeAndBroadcastGameState(gId);
+          }, 5000);
+
+        } else {
+          callback({ success: true });
+          await computeAndBroadcastGameState(gId);
         }
-
-        callback({ success: true });
-        await computeAndBroadcastGameState(gId);
 
       } catch (e: any) {
         console.error("Error in tossPickCard:", e);
