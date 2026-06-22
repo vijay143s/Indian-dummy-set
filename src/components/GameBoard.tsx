@@ -119,13 +119,14 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     const isMyTurnRightNow = game.currentTurnPlayerId === viewerPlayerId && game.winnerPlayerId === null;
 
     if (game.status === 'playing' && isMyTurnRightNow) {
-      // Trigger initial vibration
+      // Trigger initial vibration (if supported)
       if (typeof navigator !== 'undefined' && "vibrate" in navigator) {
         navigator.vibrate([100]);
       }
       
-      // Set up recurring vibration every 3 seconds
+      // Set up recurring audio ping every 3 seconds
       intervalId = window.setInterval(() => {
+        playTurnSound();
         if (typeof navigator !== 'undefined' && "vibrate" in navigator) {
           navigator.vibrate([100]);
         }
