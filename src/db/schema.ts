@@ -1,17 +1,17 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import { relations, sql } from "drizzle-orm";
+import { pgTable, text, integer, boolean, timestamp, json, serial } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 // 1. Users Table (using Mobile Auth UID as primary key)
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   uid: text("uid").primaryKey(), // Using mobile as uid
   mobile: text("mobile").notNull().unique(), // 10-digit mobile number
   displayName: text("display_name"),
-  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // 2. Games Table
-export const games = sqliteTable("games", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const games = pgTable("games", {
+  id: serial("id").primaryKey(),
   code: text("code").notNull().unique(), // Access code (e.g., 'DS-1029')
   status: text("status").notNull().default("waiting"), // 'waiting', 'toss', 'playing', 'round_finished', 'finished'
   maxScore: integer("max_score").notNull().default(200), // Elimination threshold
@@ -22,13 +22,13 @@ export const games = sqliteTable("games", {
   wildCardSuit: text("wild_card_suit"), // Randomly designated joker rank/suit
   wildCardRank: text("wild_card_rank"),
   winnerPlayerId: integer("winner_player_id"), // Reference to players.id
-  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // 3. Players Table
-export const players = sqliteTable("players", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const players = pgTable("players", {
+  id: serial("id").primaryKey(),
   gameId: integer("game_id")
     .references(() => games.id, { onDelete: "cascade" })
     .notNull(),
@@ -37,22 +37,22 @@ export const players = sqliteTable("players", {
     .notNull(),
   username: text("username").notNull(),
   turnOrder: integer("turn_order").notNull().default(0),
-  isOnline: integer("is_online", { mode: "boolean" }).notNull().default(true),
+  isOnline: boolean("is_online").notNull().default(true),
   netScore: integer("net_score").notNull().default(0),
-  isEliminated: integer("is_eliminated", { mode: "boolean" }).notNull().default(false),
-  joinedAt: text("joined_at").default(sql`CURRENT_TIMESTAMP`),
+  isEliminated: boolean("is_eliminated").notNull().default(false),
+  joinedAt: timestamp("joined_at").defaultNow(),
 });
 
 // 4. Cards Table (Detailed individual card state for secrecy & role visibility)
-export const cards = sqliteTable("cards", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const cards = pgTable("cards", {
+  id: serial("id").primaryKey(),
   gameId: integer("game_id")
     .references(() => games.id, { onDelete: "cascade" })
     .notNull(),
   suit: text("suit").notNull(), // 'spades', 'hearts', 'diamonds', 'clubs', 'joker'
   rank: text("rank").notNull(), // 'A', '2', '3', ..., '10', 'J', 'Q', 'K', 'joker'
-  isWild: integer("is_wild", { mode: "boolean" }).notNull().default(false), // Is matching the designated paper joker rank
-  isHiddenWild: integer("is_hidden_wild", { mode: "boolean" }).notNull().default(false), // Special rewarded wild card
+  isWild: boolean("is_wild").notNull().default(false), // Is matching the designated paper joker rank
+  isHiddenWild: boolean("is_hidden_wild").notNull().default(false), // Special rewarded wild card
   ownerPlayerId: integer("owner_player_id") // References players.id
     .references(() => players.id, { onDelete: "set null" }),
   location: text("location").notNull().default("deck"), // 'deck', 'discard', 'hand', 'declared'
@@ -61,21 +61,21 @@ export const cards = sqliteTable("cards", {
 });
 
 // 5. Player Hands Table
-export const playerHands = sqliteTable("player_hands", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const playerHands = pgTable("player_hands", {
+  id: serial("id").primaryKey(),
   playerId: integer("player_id")
     .references(() => players.id, { onDelete: "cascade" })
     .notNull()
     .unique(),
-  hasDeclared: integer("has_declared", { mode: "boolean" }).notNull().default(false),
-  hasDropped: integer("has_dropped", { mode: "boolean" }).notNull().default(false),
+  hasDeclared: boolean("has_declared").notNull().default(false),
+  hasDropped: boolean("has_dropped").notNull().default(false),
   score: integer("score").notNull().default(0),
-  updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // 6. Wild Card Claims Table (4 of a kind claim)
-export const wildCardClaims = sqliteTable("wild_card_claims", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const wildCardClaims = pgTable("wild_card_claims", {
+  id: serial("id").primaryKey(),
   gameId: integer("game_id")
     .references(() => games.id, { onDelete: "cascade" })
     .notNull(),
@@ -87,14 +87,14 @@ export const wildCardClaims = sqliteTable("wild_card_claims", {
     .notNull(),
   cardRank: text("card_rank").notNull(), // e.g. 'K'
   status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected', 'expired'
-  requestedAt: text("requested_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
   expiresAt: text("expires_at").notNull(),
-  cardIds: text("card_ids", { mode: "json" }).notNull(), // JSON array of 4 card IDs being verified
+  cardIds: json("card_ids").notNull(), // JSON array of 4 card IDs being verified
 });
 
 // 7. Wild Card Approvals Table
-export const wildCardApprovals = sqliteTable("wild_card_approvals", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const wildCardApprovals = pgTable("wild_card_approvals", {
+  id: serial("id").primaryKey(),
   claimId: integer("claim_id")
     .references(() => wildCardClaims.id, { onDelete: "cascade" })
     .notNull()
@@ -102,27 +102,27 @@ export const wildCardApprovals = sqliteTable("wild_card_approvals", {
   verifierPlayerId: integer("verifier_player_id")
     .references(() => players.id, { onDelete: "cascade" })
     .notNull(),
-  approved: integer("approved", { mode: "boolean" }).notNull(),
-  loggedAt: text("logged_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  approved: boolean("approved").notNull(),
+  loggedAt: timestamp("logged_at").defaultNow().notNull(),
   comments: text("comments"),
 });
 
 // 8. Game Events Table (Audit logs & Event Sourcing)
-export const gameEvents = sqliteTable("game_events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const gameEvents = pgTable("game_events", {
+  id: serial("id").primaryKey(),
   gameId: integer("game_id")
     .references(() => games.id, { onDelete: "cascade" })
     .notNull(),
   playerId: integer("player_id")
     .references(() => players.id, { onDelete: "cascade" }),
   eventType: text("event_type").notNull(), // e.g., 'draw', 'discard', 'claim_wild', 'approve_wild', 'reject_wild', 'expire_wild'
-  payload: text("payload", { mode: "json" }),
-  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  payload: json("payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // 9. Round Scores Table
-export const roundScores = sqliteTable("round_scores", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const roundScores = pgTable("round_scores", {
+  id: serial("id").primaryKey(),
   gameId: integer("game_id")
     .references(() => games.id, { onDelete: "cascade" })
     .notNull(),
@@ -132,8 +132,8 @@ export const roundScores = sqliteTable("round_scores", {
     .notNull(),
   currentPoints: integer("current_points").notNull().default(0),
   netScoreAfter: integer("net_score_after").notNull().default(0),
-  isWinner: integer("is_winner", { mode: "boolean" }).notNull().default(false),
-  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  isWinner: boolean("is_winner").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // --- Relations ---
