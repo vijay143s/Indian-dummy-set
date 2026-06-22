@@ -985,6 +985,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 viewerPlayerId={viewerPlayerId}
                 players={players}
                 onToggleLobby={() => setIsLobbyOpen(prev => !prev)}
+                onStreamsChange={setPlayerStreams}
               />
             </div>
           )}
