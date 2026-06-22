@@ -10,7 +10,7 @@ import {
 } from '../utils/game-rules.ts';
 import { 
   Timer, Crown, LogOut, CheckCircle2, UserCircle2, Swords, History, Clock, AlertCircle, Play, ArrowRight, Check, X, ShieldAlert,
-  FolderLock, Archive, ListCollapse, Sparkles, Award, Menu, Trophy
+  FolderLock, Archive, ListCollapse, Sparkles, Award, Menu, Trophy, Volume2, VolumeX
 } from 'lucide-react';
 
 interface GameBoardProps {
@@ -67,6 +67,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const [showDeclareConfirm, setShowDeclareConfirm] = useState(false);
   const [showDropConfirm, setShowDropConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [playerStreams, setPlayerStreams] = useState<Record<number, { stream: MediaStream | null; videoEnabled: boolean; speaking: boolean }>>({});
+  const [isNotificationsMuted, setIsNotificationsMuted] = useState(false);
 
   // Load and reconcile player hand cards into groupings
   const myHandCards = cards.filter(c => c.ownerPlayerId === viewerPlayerId && c.location === 'hand');
@@ -76,8 +78,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const claimantPlayer = activeClaim ? players.find(p => p.id === activeClaim.claimantPlayerId) : null;
   const verifierPlayer = activeClaim ? players.find(p => p.id === activeClaim.verifierPlayerId) : null;
 
-  // Play turn notification sound
+  // Play a simple beep
   const playTurnSound = () => {
+    if (isNotificationsMuted) return;
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
@@ -139,7 +142,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       
       // Set up recurring audio ping every 3 seconds
       intervalId = window.setInterval(() => {
-        playTurnSound();
+        if (!isNotificationsMuted) {
+          playTurnSound();
+        }
         if (typeof navigator !== 'undefined' && "vibrate" in navigator) {
           navigator.vibrate([100]);
         }
@@ -151,7 +156,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         window.clearInterval(intervalId);
       }
     };
-  }, [game.currentTurnPlayerId, game.status, viewerPlayerId, game.winnerPlayerId]);
+  }, [game.currentTurnPlayerId, game.status, viewerPlayerId, game.winnerPlayerId, isNotificationsMuted]);
 
   useEffect(() => {
     // Graceously reconcile local groups with the current card list from the server
@@ -605,12 +610,20 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               </span>
             </div>
           </div>
-          <button 
-            onClick={() => setShowLeaveConfirm(true)}
-            className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold rounded-lg border border-slate-700 transition"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Leave
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsNotificationsMuted(prev => !prev)}
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700/80 text-xs font-sans font-bold rounded-lg border border-slate-700 transition"
+            >
+              {isNotificationsMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+            </button>
+            <button 
+              onClick={() => setShowLeaveConfirm(true)}
+              className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold rounded-lg border border-slate-700 transition"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Leave
+            </button>
+          </div>
         </div>
 
         {/* Player Slot Grid */}
@@ -818,12 +831,20 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               </div>
             )}
           </div>
-          <button 
-            onClick={() => setShowLeaveConfirm(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold border border-slate-700 rounded-lg transition"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Leave
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsNotificationsMuted(prev => !prev)}
+              className="flex items-center justify-center w-8 h-8 bg-slate-800 hover:bg-slate-700/80 text-xs font-sans font-bold border border-slate-700 rounded-lg transition"
+            >
+              {isNotificationsMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+            </button>
+            <button 
+              onClick={() => setShowLeaveConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold border border-slate-700 rounded-lg transition"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Leave
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1057,7 +1078,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               <div className="flex flex-col">
                 <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 font-bold">Game Wild Card</span>
                 <span className="text-xs font-sans font-black text-amber-400 tracking-tight uppercase">
-                  {game.wildCardRank ? `${game.wildCardRank} of ${game.wildCardSuit}s` : "Pending Blind Selection"}
+                  {game.wildCardRank ? `${game.wildCardRank} of ${game.wildCardSuit}s` : ""}
                 </span>
               </div>
               {game.wildCardRank ? (

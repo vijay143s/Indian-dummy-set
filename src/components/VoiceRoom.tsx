@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Mic, MicOff, Volume2, VolumeX, Users, Radio, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Users, Radio, AlertCircle } from 'lucide-react';
 import { PlayerType } from '../types.ts';
 import { DraggableMuteButton } from './DraggableMuteButton.tsx';
 
@@ -10,6 +10,7 @@ interface VoiceRoomProps {
   viewerPlayerId: number | null;
   players: PlayerType[];
   onToggleLobby?: () => void;
+  onStreamsChange?: (streams: Record<number, { stream: MediaStream | null; videoEnabled: boolean; speaking: boolean }>) => void;
 }
 
 interface PeerState {
@@ -17,7 +18,31 @@ interface PeerState {
   username: string;
   speaking: boolean;
   muted: boolean;
+  videoEnabled: boolean;
+  stream?: MediaStream;
 }
+
+export const VideoPlayer = ({ stream, isLocal = false }: { stream: MediaStream | null, isLocal?: boolean }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  if (!stream) return null;
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted={isLocal}
+      className={`absolute inset-0 w-full h-full object-cover rounded-xl ${isLocal ? 'scale-x-[-1]' : ''}`}
+    />
+  );
+};
 
 export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   socket,
@@ -25,23 +50,22 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   viewerPlayerId,
   players,
   onToggleLobby,
+  onStreamsChange,
 }) => {
   const [localMuted, setLocalMuted] = useState(true);
+  const [localVideoEnabled, setLocalVideoEnabled] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [peers, setPeers] = useState<Record<string, PeerState>>({});
   const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [socketToPlayerId, setSocketToPlayerId] = useState<Record<string, number>>({});
 
   // Refs for WebRTC resources
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
-  const audioElements = useRef<Record<string, HTMLAudioElement>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const javascriptNodeRef = useRef<ScriptProcessorNode | null>(null);
-
-  // Map to pair player userId/username with remote WebRTC connection socket IDs
-  const socketToUserMapRef = useRef<Record<string, string>>({});
 
   const currentUser = players.find(p => p.id === viewerPlayerId);
 
@@ -60,7 +84,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     // Handle incoming WebRTC audio offers
     const handleVoiceOffer = async (data: { senderSocketId: string; offer: RTCSessionDescriptionInit; senderUsername: string; muted?: boolean }) => {
       try {
-        console.log("Received voice offer from:", data.senderUsername, data.senderSocketId);
+        console.log("Received media offer from:", data.senderUsername, data.senderSocketId);
         
         // Update peer list with current muted state
         setPeers(prev => ({
@@ -69,7 +93,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             socketId: data.senderSocketId,
             username: data.senderUsername,
             speaking: false,
-            muted: data.muted !== undefined ? data.muted : false
+            muted: data.muted !== undefined ? data.muted : false,
+            videoEnabled: false,
+            stream: prev[data.senderSocketId]?.stream
           }
         }));
 
@@ -89,14 +115,14 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           muted: localMuted
         });
       } catch (e: any) {
-        console.error("Error setting up remote audio description:", e);
+        console.error("Error setting up remote media description:", e);
       }
     };
 
     // Handle incoming answers
     const handleVoiceAnswer = async (data: { senderSocketId: string; answer: RTCSessionDescriptionInit; muted?: boolean }) => {
       try {
-        console.log("Received remote voice answer from socket:", data.senderSocketId);
+        console.log("Received remote media answer from socket:", data.senderSocketId);
         const pc = peerConnections.current[data.senderSocketId];
         if (pc) {
           await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -133,7 +159,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     // Triggered when a new player joins the lobby voice channel
     const handleNewPeer = async (data: { socketId: string; username: string }) => {
       try {
-        console.log("A new player joined voice channel:", data.username, data.socketId);
+        console.log("A new player joined media channel:", data.username, data.socketId);
         
         setPeers(prev => ({
           ...prev,
@@ -141,7 +167,9 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
             socketId: data.socketId,
             username: data.username,
             speaking: false,
-            muted: true // Safe default until handshake replies
+            muted: true, // Safe default until handshake replies
+            videoEnabled: false,
+            stream: prev[data.socketId]?.stream
           }
         }));
 
@@ -188,18 +216,38 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       });
     };
 
+    // Handle peer video on/off status (This was not fully implemented in the frontend previously)
+    // Wait, the backend emits it as part of room state, but let's add a listener just in case we add direct events later.
+    const handleVoiceVideoState = (data: { senderSocketId: string; videoEnabled: boolean }) => {
+      setPeers(prev => {
+        if (!prev[data.senderSocketId]) return prev;
+        return {
+          ...prev,
+          [data.senderSocketId]: {
+            ...prev[data.senderSocketId],
+            videoEnabled: data.videoEnabled
+          }
+        };
+      });
+    };
+
     // Handle server-authoritative voice pool states (handles missing handshakes or WebRTC constraints in sandbox)
-    const handleVoiceRoomState = (data: Record<number, { muted: boolean; speaking: boolean; socketId: string; username: string }>) => {
+    const handleVoiceRoomState = (data: Record<number, { muted: boolean; speaking: boolean; videoEnabled?: boolean; socketId: string; username: string }>) => {
+      const mapping: Record<string, number> = {};
+      
       setPeers(prev => {
         const nextPeers = { ...prev };
-        Object.values(data).forEach(srvPeer => {
+        Object.entries(data).forEach(([pIdStr, srvPeer]) => {
+          mapping[srvPeer.socketId] = parseInt(pIdStr, 10);
           if (srvPeer.socketId === socket.id) return;
           
           nextPeers[srvPeer.socketId] = {
             socketId: srvPeer.socketId,
             username: srvPeer.username,
             speaking: srvPeer.speaking,
-            muted: srvPeer.muted
+            muted: srvPeer.muted,
+            videoEnabled: srvPeer.videoEnabled || false,
+            stream: prev[srvPeer.socketId]?.stream // preserve existing streams
           };
         });
 
@@ -213,6 +261,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
         return nextPeers;
       });
+
+      setSocketToPlayerId(mapping);
     };
 
     // Hook listeners
@@ -223,9 +273,10 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     socket.on("voiceSpeakingState", handleVoiceSpeaking);
     socket.on("voiceMuteState", handleVoiceMuted);
     socket.on("voiceRoomState", handleVoiceRoomState);
+    socket.on("voiceVideoState", handleVoiceVideoState);
 
-    // Join voice channel immediately
-    initializeVoiceStream();
+    // Join media channel immediately
+    initializeMediaStream();
 
     return () => {
       socket.off("voiceOffer", handleVoiceOffer);
@@ -235,7 +286,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       socket.off("voiceSpeakingState", handleVoiceSpeaking);
       socket.off("voiceMuteState", handleVoiceMuted);
       socket.off("voiceRoomState", handleVoiceRoomState);
-      cleanupVoiceResources();
+      socket.off("voiceVideoState", handleVoiceVideoState);
+      cleanupMediaResources();
     };
   }, [socket, gameId]);
 
@@ -253,12 +305,47 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     }
   }, [localMuted, isJoined]);
 
+  // Synchronize dynamic local video status to socket
+  useEffect(() => {
+    if (socket && isJoined) {
+      socket.emit("voiceVideoState", { videoEnabled: localVideoEnabled });
+    }
+  }, [localVideoEnabled, isJoined]);
+
+  // Bubble streams up to parent component
+  useEffect(() => {
+    if (onStreamsChange) {
+      const output: Record<number, { stream: MediaStream | null; videoEnabled: boolean; speaking: boolean }> = {};
+      
+      if (viewerPlayerId) {
+        output[viewerPlayerId] = {
+          stream: localStreamRef.current,
+          videoEnabled: localVideoEnabled,
+          speaking: localSpeaking
+        };
+      }
+
+      (Object.values(peers) as PeerState[]).forEach(peer => {
+        const pId = socketToPlayerId[peer.socketId];
+        if (pId) {
+          output[pId] = {
+            stream: peer.stream || null,
+            videoEnabled: peer.videoEnabled,
+            speaking: peer.speaking
+          };
+        }
+      });
+
+      onStreamsChange(output);
+    }
+  }, [peers, localVideoEnabled, localSpeaking, viewerPlayerId, socketToPlayerId, onStreamsChange]);
+
   // Sets up RTCPeerConnection for a remote peer socket
   const createPeerConnection = (socketId: string, username: string): RTCPeerConnection => {
     const pc = new RTCPeerConnection(rtcConfig);
     peerConnections.current[socketId] = pc;
 
-    // Direct local audio track sending
+    // Direct local audio and video track sending
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
@@ -275,22 +362,28 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       }
     };
 
-    // Play incoming audio streams in dynamic audio nodes
+    // Receive incoming streams into the React state
     pc.ontrack = (event) => {
-      console.log("Receiving audio track from:", username);
+      console.log("Receiving media track from:", username);
       const remoteStream = event.streams[0];
-
-      let audio = audioElements.current[socketId];
-      if (!audio) {
-        audio = document.createElement("audio") as HTMLAudioElement;
-        audio.id = `audio-peer-${socketId}`;
-        audio.autoplay = true;
-        audio.style.display = "none";
-        document.body.appendChild(audio);
-        audioElements.current[socketId] = audio;
-      }
-      audio.srcObject = remoteStream;
-      audio.play().catch(e => console.error("Auto play sound stream was blocked by browser policies:", e));
+      
+      setPeers(prev => {
+        const existing = prev[socketId];
+        return {
+          ...prev,
+          [socketId]: existing ? {
+            ...existing,
+            stream: remoteStream
+          } : {
+            socketId,
+            username,
+            speaking: false,
+            muted: true,
+            videoEnabled: false,
+            stream: remoteStream
+          }
+        };
+      });
     };
 
     pc.onconnectionstatechange = () => {
@@ -308,10 +401,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       peerConnections.current[socketId].close();
       delete peerConnections.current[socketId];
     }
-    if (audioElements.current[socketId]) {
-      audioElements.current[socketId].remove();
-      delete audioElements.current[socketId];
-    }
     setPeers(prev => {
       const copy = { ...prev };
       delete copy[socketId];
@@ -319,23 +408,31 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     });
   };
 
-  // Setup local microphone stream
-  const initializeVoiceStream = async () => {
+  // Setup local A/V stream
+  const initializeMediaStream = async () => {
     try {
       setErrorMessage(null);
-      // Request device microphone access
+      // Request device microphone & camera access
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user"
+        }
       });
 
       localStreamRef.current = stream;
 
-      // By default start with MIC MUTED for etiquette
+      // By default start with MIC MUTED and VIDEO DISABLED for privacy
       stream.getAudioTracks().forEach(t => {
+        t.enabled = false;
+      });
+      stream.getVideoTracks().forEach(t => {
         t.enabled = false;
       });
 
@@ -343,15 +440,15 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       setupVoiceVolumeAnalyzer(stream);
 
       setIsJoined(true);
-      console.log("Microphone stream successfully linked!");
+      console.log("AV stream successfully linked!");
 
       // Request handshakes from all current players in room
       if (socket) {
         socket.emit("requestPeerConnections");
       }
     } catch (e: any) {
-      console.error("Failed to capture user mic input streams:", e);
-      setErrorMessage("Microphone access blocked. Click on site details to allow microphone permissions.");
+      console.error("Failed to capture user AV input streams:", e);
+      setErrorMessage("Media access blocked. Click on site details to allow microphone and camera permissions.");
     }
   };
 
@@ -423,8 +520,20 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     });
   };
 
+  // Handle Video On / Off triggers
+  const toggleVideo = () => {
+    if (!localStreamRef.current) return;
+
+    const currentVideoEnabled = !localVideoEnabled;
+    setLocalVideoEnabled(currentVideoEnabled);
+
+    localStreamRef.current.getVideoTracks().forEach(track => {
+      track.enabled = currentVideoEnabled;
+    });
+  };
+
   // Clean elements and references
-  const cleanupVoiceResources = () => {
+  const cleanupMediaResources = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -435,12 +544,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
     });
     peerConnections.current = {};
 
-    // Clear audio players
-    Object.keys(audioElements.current).forEach(sid => {
-      audioElements.current[sid].remove();
-    });
-    audioElements.current = {};
-
     // Clear Analyzer
     if (javascriptNodeRef.current) javascriptNodeRef.current.disconnect();
     if (analyserRef.current) analyserRef.current.disconnect();
@@ -449,8 +552,8 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
   return (
     <div className="bg-slate-900/90 backdrop-blur border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col gap-4">
-      {/* Voice header bar */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      {/* Voice/Video header bar */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
         <div className="flex items-center gap-2">
           <div className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -458,32 +561,52 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
           </div>
           <div>
             <h4 className="text-xs font-sans font-extrabold uppercase tracking-widest text-slate-100 flex items-center gap-1.5">
-              Live Voice Lobby
+              Live AV Lobby
             </h4>
-            <p className="text-[9px] font-mono text-slate-400 uppercase">Interactive teams-style audio</p>
+            <p className="text-[9px] font-mono text-slate-400 uppercase">Interactive audio & video</p>
           </div>
         </div>
 
-        <button
-          onClick={toggleMute}
-          disabled={!isJoined}
-          id="voice-mute-toggle-btn"
-          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md duration-200 cursor-pointer ${
-            localMuted
-              ? 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30'
-              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow shadow-emerald-600/20'
-          }`}
-        >
-          {localMuted ? (
-            <>
-              <MicOff className="w-3.5 h-3.5 text-rose-400 animate-pulse" /> Unmute Mic
-            </>
-          ) : (
-            <>
-              <Mic className="w-3.5 h-3.5 text-white animate-bounce" /> Mute Microphone
-            </>
-          )}
-        </button>
+        <div className="flex gap-2 self-stretch sm:self-auto">
+          <button
+            onClick={toggleVideo}
+            disabled={!isJoined}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md duration-200 cursor-pointer ${
+              !localVideoEnabled
+                ? 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow shadow-emerald-600/20 border border-emerald-500/50'
+            }`}
+          >
+            {localVideoEnabled ? (
+              <>
+                <Video className="w-3.5 h-3.5 text-white" /> Camera On
+              </>
+            ) : (
+              <>
+                <VideoOff className="w-3.5 h-3.5 text-rose-400" /> Camera Off
+              </>
+            )}
+          </button>
+          <button
+            onClick={toggleMute}
+            disabled={!isJoined}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md duration-200 cursor-pointer ${
+              localMuted
+                ? 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow shadow-emerald-600/20 border border-emerald-500/50'
+            }`}
+          >
+            {localMuted ? (
+              <>
+                <MicOff className="w-3.5 h-3.5 text-rose-400" /> Mic Off
+              </>
+            ) : (
+              <>
+                <Mic className="w-3.5 h-3.5 text-white" /> Mic On
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {typeof document !== 'undefined' && document.body && (
@@ -506,31 +629,38 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         </div>
       )}
 
-      {/* Voice grid list (Microsoft Teams stylized cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {/* Voice/Video grid list */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 gap-2">
         {/* Local user */}
         <div
-          className={`p-3 rounded-xl border flex flex-col justify-between h-20 relative transition-all duration-300 ${
+          className={`overflow-hidden rounded-xl border flex flex-col justify-between ${localVideoEnabled ? 'h-32 sm:h-40 lg:h-32' : 'h-20 p-3'} relative transition-all duration-300 ${
             localSpeaking && !localMuted
-              ? 'bg-emerald-950/20 border-emerald-500 shadow-lg shadow-emerald-500/10 scale-102 ring-2 ring-emerald-500/20'
+              ? 'bg-emerald-950/20 border-emerald-500 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/20 scale-[1.02]'
               : 'bg-slate-950/40 border-slate-800'
           }`}
         >
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tight truncate">
+          {localVideoEnabled && (
+            <VideoPlayer stream={localStreamRef.current} isLocal={true} />
+          )}
+          
+          {/* Overlay info if video is enabled, or block info if video is disabled */}
+          <div className={`flex justify-between items-start w-full ${localVideoEnabled ? 'absolute inset-x-0 top-0 p-2 bg-gradient-to-b from-slate-950/80 to-transparent z-10' : ''}`}>
+            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tight truncate drop-shadow-md">
               You
             </span>
-            {localMuted ? (
-              <MicOff className="w-3.5 h-3.5 text-slate-500" />
-            ) : localSpeaking ? (
-              <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            ) : (
-              <Mic className="w-3.5 h-3.5 text-slate-400" />
-            )}
+            <div className="flex gap-1">
+              {localMuted ? (
+                <MicOff className="w-3.5 h-3.5 text-rose-400 drop-shadow-md" />
+              ) : localSpeaking ? (
+                <Radio className="w-3.5 h-3.5 text-emerald-400 drop-shadow-md animate-pulse" />
+              ) : (
+                <Mic className="w-3.5 h-3.5 text-emerald-400 drop-shadow-md" />
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-2.5 h-2.5 rounded-full ${localMuted ? 'bg-slate-700' : localSpeaking ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
-            <span className="text-xs font-sans font-black text-slate-200 truncate">{currentUser?.username || "You"}</span>
+          <div className={`flex items-center gap-2 w-full ${localVideoEnabled ? 'absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-slate-950/90 to-transparent z-10' : ''}`}>
+            <div className={`w-2 h-2 rounded-full ${localMuted ? 'bg-rose-500' : localSpeaking ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+            <span className="text-xs font-sans font-black text-white truncate drop-shadow-md">{currentUser?.username || "You"}</span>
           </div>
         </div>
 
@@ -538,27 +668,35 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         {(Object.values(peers) as PeerState[]).map(peer => (
           <div
             key={peer.socketId}
-            className={`p-3 rounded-xl border flex flex-col justify-between h-20 relative transition-all duration-300 ${
+            className={`overflow-hidden rounded-xl border flex flex-col justify-between ${peer.videoEnabled ? 'h-32 sm:h-40 lg:h-32' : 'h-20 p-3'} relative transition-all duration-300 ${
               peer.speaking && !peer.muted
-                ? 'bg-emerald-950/20 border-emerald-500 shadow-lg shadow-emerald-500/10 scale-102 ring-2 ring-emerald-500/20'
+                ? 'bg-emerald-950/20 border-emerald-500 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/20 scale-[1.02]'
                 : 'bg-slate-950/40 border-slate-800'
             }`}
           >
-            <div className="flex justify-between items-start">
-              <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tight truncate">
-                Remote Player
+            {peer.stream && (
+              // We render the VideoPlayer regardless of peer.videoEnabled just to be safe,
+              // but we control its visibility or rely on the actual track's enabled state
+              <div className={`${peer.videoEnabled ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}>
+                 <VideoPlayer stream={peer.stream} isLocal={false} />
+              </div>
+            )}
+            
+            <div className={`flex justify-between items-start w-full ${peer.videoEnabled ? 'absolute inset-x-0 top-0 p-2 bg-gradient-to-b from-slate-950/80 to-transparent z-10' : ''}`}>
+              <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-tight truncate drop-shadow-md">
+                Remote
               </span>
               {peer.muted ? (
-                <MicOff className="w-3.5 h-3.5 text-rose-500" />
+                <MicOff className="w-3.5 h-3.5 text-rose-500 drop-shadow-md" />
               ) : peer.speaking ? (
-                <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <Radio className="w-3.5 h-3.5 text-emerald-400 drop-shadow-md animate-pulse" />
               ) : (
-                <Mic className="w-3.5 h-3.5 text-slate-400" />
+                <Mic className="w-3.5 h-3.5 text-emerald-400 drop-shadow-md" />
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <div className={`w-2.5 h-2.5 rounded-full ${peer.muted ? 'bg-rose-500' : peer.speaking ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
-              <span className="text-xs font-sans font-black text-slate-200 truncate">{peer.username}</span>
+            <div className={`flex items-center gap-2 w-full ${peer.videoEnabled ? 'absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-slate-950/90 to-transparent z-10' : ''}`}>
+              <div className={`w-2 h-2 rounded-full ${peer.muted ? 'bg-rose-500' : peer.speaking ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+              <span className="text-xs font-sans font-black text-white truncate drop-shadow-md">{peer.username}</span>
             </div>
           </div>
         ))}
@@ -566,7 +704,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
         {Object.keys(peers).length === 0 && (
           <div className="col-span-full py-4 text-center leading-relaxed">
             <p className="text-[10px] font-mono uppercase text-slate-500">
-              Waiting for other players to unmute or join live audio
+              Waiting for other players to unmute or join live AV
             </p>
           </div>
         )}

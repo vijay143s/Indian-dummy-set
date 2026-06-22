@@ -228,7 +228,7 @@ async function startServer() {
   const claimTimers: Record<number, NodeJS.Timeout> = {};
 
   // Store in-memory rooms' voice states
-  const roomVoiceStates: Record<number, Record<number, { muted: boolean; speaking: boolean; socketId: string; username: string }>> = {};
+  const roomVoiceStates: Record<number, Record<number, { muted: boolean; speaking: boolean; videoEnabled: boolean; socketId: string; username: string }>> = {};
 
   // Socket.IO Connection Handler
   io.on("connection", (socket: Socket) => {
@@ -1150,6 +1150,7 @@ async function startServer() {
         roomVoiceStates[gId][pId] = {
           muted: true, // Safe default on enter
           speaking: false,
+          videoEnabled: false,
           socketId: socket.id,
           username
         };
@@ -1175,6 +1176,7 @@ async function startServer() {
         roomVoiceStates[gId][pId] = {
           muted: roomVoiceStates[gId][pId]?.muted ?? true,
           speaking: data.speaking,
+          videoEnabled: roomVoiceStates[gId][pId]?.videoEnabled ?? false,
           socketId: socket.id,
           username
         };
@@ -1191,6 +1193,24 @@ async function startServer() {
         roomVoiceStates[gId][pId] = {
           muted: data.muted,
           speaking: roomVoiceStates[gId][pId]?.speaking ?? false,
+          videoEnabled: roomVoiceStates[gId][pId]?.videoEnabled ?? false,
+          socketId: socket.id,
+          username
+        };
+        io.to(`game_${gId}`).emit("voiceRoomState", roomVoiceStates[gId]);
+      }
+    });
+
+    socket.on("voiceVideoState", (data: { videoEnabled: boolean }) => {
+      const gId = (socket as any).gameId;
+      const pId = (socket as any).playerId;
+      const username = (socket as any).username || "Unknown";
+      if (gId && pId) {
+        if (!roomVoiceStates[gId]) roomVoiceStates[gId] = {};
+        roomVoiceStates[gId][pId] = {
+          muted: roomVoiceStates[gId][pId]?.muted ?? true,
+          speaking: roomVoiceStates[gId][pId]?.speaking ?? false,
+          videoEnabled: data.videoEnabled,
           socketId: socket.id,
           username
         };
