@@ -58,7 +58,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [peers, setPeers] = useState<Record<string, PeerState>>({});
   const [localSpeaking, setLocalSpeaking] = useState(false);
-  const [socketToPlayerId, setSocketToPlayerId] = useState<Record<string, number>>({});
 
   // Refs for WebRTC resources
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -233,14 +232,6 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
     // Handle server-authoritative voice pool states (handles missing handshakes or WebRTC constraints in sandbox)
     const handleVoiceRoomState = (data: Record<number, { muted: boolean; speaking: boolean; videoEnabled?: boolean; socketId: string; username: string }>) => {
-      const mapping: Record<string, number> = {};
-      
-      // Populate mapping synchronously
-      Object.entries(data).forEach(([pIdStr, srvPeer]) => {
-        mapping[srvPeer.socketId] = parseInt(pIdStr, 10);
-      });
-      setSocketToPlayerId(mapping);
-
       setPeers(prev => {
         const nextPeers = { ...prev };
         Object.entries(data).forEach(([pIdStr, srvPeer]) => {
@@ -329,7 +320,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
       }
 
       (Object.values(peers) as PeerState[]).forEach(peer => {
-        const pId = socketToPlayerId[peer.socketId];
+        const pId = players.find(p => p.username === peer.username)?.id;
         if (pId) {
           output[pId] = {
             stream: peer.stream || null,
@@ -341,7 +332,7 @@ export const VoiceRoom: React.FC<VoiceRoomProps> = ({
 
       onStreamsChange(output);
     }
-  }, [peers, localVideoEnabled, localSpeaking, viewerPlayerId, socketToPlayerId, onStreamsChange]);
+  }, [peers, localVideoEnabled, localSpeaking, viewerPlayerId, players, onStreamsChange]);
 
   // Sets up RTCPeerConnection for a remote peer socket
   const createPeerConnection = (socketId: string, username: string): RTCPeerConnection => {

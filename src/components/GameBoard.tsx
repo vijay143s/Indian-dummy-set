@@ -1937,26 +1937,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         </div>
       )}
 
-      {/* Global Success Popup Modal */}
-      {successInfo && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
-          <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl shadow-2xl shadow-emerald-500/20 p-6 max-w-sm w-full flex flex-col items-center text-center">
-            <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-8 h-8" />
-            </div>
-            <h2 className="text-lg font-black font-sans text-white uppercase tracking-wider mb-2">Success</h2>
-            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
-              {successInfo}
-            </p>
-            <button 
-              onClick={() => setSuccessInfo(null)}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition border border-slate-700"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Global Success Popup Modal Removed per user request */}
     </div>
   );
 };
