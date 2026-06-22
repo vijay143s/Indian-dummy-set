@@ -109,6 +109,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     if (game.status === 'playing' && game.currentTurnPlayerId !== prevTurnPlayerId.current) {
       if (game.currentTurnPlayerId === viewerPlayerId) {
         playTurnSound();
+        
+        // Trigger browser notification
+        if (typeof Notification !== 'undefined') {
+          if (Notification.permission === 'granted') {
+            new Notification("Your Turn! 🃏", { body: "It's your turn to play in Indian Dummy Set!", icon: "/vite.svg" });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                new Notification("Your Turn! 🃏", { body: "It's your turn to play in Indian Dummy Set!", icon: "/vite.svg" });
+              }
+            });
+          }
+        }
       }
       prevTurnPlayerId.current = game.currentTurnPlayerId;
     }
@@ -1337,7 +1350,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                               }}
                               className={`relative transition-all duration-200 ${!isWinnerDeclared ? 'cursor-grab active:cursor-grabbing hover:-translate-y-3 hover:z-50' : ''} ${isSelected ? '-translate-y-4 shadow-xl' : ''} ${idx === 0 ? '' : 'ml-[-32px] lg:ml-[-40px]'}`}
                               style={{ 
-                                  zIndex: idx + 2
+                                  zIndex: isSelected ? 999 : idx + 2
                                 }}
                             >
                               <CardVisual
