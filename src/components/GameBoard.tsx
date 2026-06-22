@@ -115,6 +115,31 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   }, [game.currentTurnPlayerId, game.status, viewerPlayerId]);
 
   useEffect(() => {
+    let intervalId: number | undefined;
+    const isMyTurnRightNow = game.currentTurnPlayerId === viewerPlayerId && game.winnerPlayerId === null;
+
+    if (game.status === 'playing' && isMyTurnRightNow) {
+      // Trigger initial vibration
+      if (typeof navigator !== 'undefined' && "vibrate" in navigator) {
+        navigator.vibrate([100]);
+      }
+      
+      // Set up recurring vibration every 3 seconds
+      intervalId = window.setInterval(() => {
+        if (typeof navigator !== 'undefined' && "vibrate" in navigator) {
+          navigator.vibrate([100]);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [game.currentTurnPlayerId, game.status, viewerPlayerId, game.winnerPlayerId]);
+
+  useEffect(() => {
     // Graceously reconcile local groups with the current card list from the server
     const currentHandIds = myHandCards.map(c => c.id);
 
