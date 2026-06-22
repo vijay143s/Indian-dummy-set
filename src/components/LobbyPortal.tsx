@@ -127,7 +127,7 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="LOBBY CODE (E.g. DS-HD9A)"
+              placeholder="6-DIGIT CODE (E.g. 123456)"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               required

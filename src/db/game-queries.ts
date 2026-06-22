@@ -3,14 +3,12 @@ import { games, players, cards, playerHands, wildCardClaims, wildCardApprovals, 
 import { eq, and, desc, asc, sql, or } from 'drizzle-orm';
 import { CardType, PlayerType, GameType, WildCardClaimType } from '../types.ts';
 
-// Helper to generate a unique random game code (e.g. DS-1234)
 function generateGameCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
   for (let i = 0; i < 6; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += Math.floor(Math.random() * 10).toString();
   }
-  return `DS-${result}`;
+  return result;
 }
 
 // 1. Create a Game Lobby
