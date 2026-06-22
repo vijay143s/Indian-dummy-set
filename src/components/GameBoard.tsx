@@ -66,6 +66,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   // Declaration confirmation state
   const [showDeclareConfirm, setShowDeclareConfirm] = useState(false);
   const [showDropConfirm, setShowDropConfirm] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // Load and reconcile player hand cards into groupings
   const myHandCards = cards.filter(c => c.ownerPlayerId === viewerPlayerId && c.location === 'hand');
@@ -565,6 +566,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               </span>
             </div>
           </div>
+          <button 
+            onClick={() => setShowLeaveConfirm(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold rounded-lg border border-slate-700 transition"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Leave
+          </button>
         </div>
 
         {/* Player Slot Grid */}
@@ -703,6 +710,39 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Leave Confirmation Overlay */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-6">
+            <div className="text-center">
+              <LogOut className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+              <h2 className="text-xl font-black font-sans text-white uppercase tracking-wider mb-2">Leave Game?</h2>
+              <p className="text-slate-300 text-sm leading-relaxed">
+                Are you sure you want to leave the game? This will disconnect you from the current session.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition border border-slate-700/50 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  onExit();
+                }}
+                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition border border-rose-500 shadow-lg shadow-rose-600/20 text-sm"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Top Meta info panel */}
       <div className="flex flex-wrap justify-between items-center bg-slate-900 border-b md:border border-slate-800 p-2 md:p-4 md:rounded-xl shadow-lg gap-2 md:gap-4 shrink-0 z-[60]">
@@ -739,6 +779,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               </div>
             )}
           </div>
+          <button 
+            onClick={() => setShowLeaveConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700/80 hover:text-red-400 text-xs font-sans font-bold border border-slate-700 rounded-lg transition"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Leave
+          </button>
         </div>
       </div>
 

@@ -34,7 +34,7 @@ import {
 import { validateDeclareGroups, getCardScoreValue, calculateDetailedScoreBreakdown } from "./src/utils/game-rules.ts";
 import { CardType, PlayerType, GameType } from "./src/types.ts";
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   const app = express();
