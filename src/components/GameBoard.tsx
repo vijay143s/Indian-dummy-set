@@ -765,29 +765,28 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
       {/* Leave Confirmation Overlay */}
       {showLeaveConfirm && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-6">
-            <div className="text-center">
-              <LogOut className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-              <h2 className="text-xl font-black font-sans text-white uppercase tracking-wider mb-2">Leave Game?</h2>
-              <p className="text-slate-300 text-sm leading-relaxed">
-                Are you sure you want to leave the game? This will disconnect you from the current session.
-              </p>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 max-w-sm w-full flex flex-col items-center text-center">
+            <div className="w-12 h-12 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-4">
+              <LogOut className="w-6 h-6" />
             </div>
-            
-            <div className="flex gap-3">
-              <button
+            <h2 className="text-xl font-black font-sans text-white uppercase tracking-wider mb-2">Leave Game?</h2>
+            <p className="text-slate-400 text-xs mb-6 leading-relaxed">
+              Are you sure you want to leave the game? This will disconnect you from the current session.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button 
                 onClick={() => setShowLeaveConfirm(false)}
-                className="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition border border-slate-700/50 text-sm"
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition"
               >
                 Cancel
               </button>
-              <button
+              <button 
                 onClick={() => {
                   setShowLeaveConfirm(false);
                   onExit();
                 }}
-                className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition border border-rose-500 shadow-lg shadow-rose-600/20 text-sm"
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-lg shadow-rose-600/20"
               >
                 Leave
               </button>
@@ -848,17 +847,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         </div>
       </div>
 
-      {actionError && (
-        <div id="gameplay-error" className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono">
-          {actionError}
-        </div>
-      )}
-
-      {successInfo && (
-        <div id="gameplay-success" className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
-          {successInfo}
-        </div>
-      )}
+      {/* Replaced inline actionError/successInfo with global modals */}
 
       {/* Notifications / Claims (Exclude the modal banner here) */}
       {activeClaim && activeClaim.status === 'pending' && viewerPlayerId === activeClaim.claimantPlayerId && (
@@ -1927,6 +1916,47 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         </div>
       )}
 
+      {/* Global Error Popup Modal */}
+      {actionError && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl shadow-2xl shadow-rose-500/20 p-6 max-w-sm w-full flex flex-col items-center text-center">
+            <div className="w-14 h-14 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mb-4">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h2 className="text-lg font-black font-sans text-white uppercase tracking-wider mb-2">Action Error</h2>
+            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+              {actionError}
+            </p>
+            <button 
+              onClick={() => setActionError(null)}
+              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition border border-slate-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Global Success Popup Modal */}
+      {successInfo && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+          <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl shadow-2xl shadow-emerald-500/20 p-6 max-w-sm w-full flex flex-col items-center text-center">
+            <div className="w-14 h-14 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-lg font-black font-sans text-white uppercase tracking-wider mb-2">Success</h2>
+            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+              {successInfo}
+            </p>
+            <button 
+              onClick={() => setSuccessInfo(null)}
+              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition border border-slate-700"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
