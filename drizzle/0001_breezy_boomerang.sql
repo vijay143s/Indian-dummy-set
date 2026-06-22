@@ -1,0 +1,1 @@
+ALTER TABLE `player_hands` ADD `has_dropped` integer DEFAULT false NOT NULL;

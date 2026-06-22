@@ -1,0 +1,1 @@
+{"name":"Indian Dummy Set Game","description":"A multiplayer backend-authoritative Indian Dummy Set card game with special wild card claims, real-time Socket.IO sync, and PostgreSQL persistence.","requestFramePermissions":["microphone"],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}
