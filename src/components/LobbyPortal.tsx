@@ -16,6 +16,7 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
   const [mobile, setMobile] = useState('');
   const [name, setName] = useState('');
   const [maxScore, setMaxScore] = useState<number | string>(200);
+  const [gameAmount, setGameAmount] = useState<number | string>(0);
   const [submitting, setSubmitting] = useState(false);
 
   // Load from local storage on mount
@@ -59,7 +60,8 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
     setSubmitting(true);
     persistIdentity();
     const finalScore = typeof maxScore === 'number' ? maxScore : parseInt(maxScore) || 200;
-    onCreateGame(mobile, name, finalScore);
+    const finalAmount = typeof gameAmount === 'number' ? gameAmount : parseInt(gameAmount) || 0;
+    onCreateGame(mobile, name, finalScore, finalAmount);
     setTimeout(() => setSubmitting(false), 2000);
   };
 
@@ -156,16 +158,29 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
         {/* Create Match Controls */}
         <div className="flex flex-col gap-3">
           <label className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold">Host New Lobby</label>
-          <div className="flex gap-2 items-center bg-slate-950 px-4 py-2 rounded-xl border border-slate-800">
-            <span className="text-xs font-mono text-slate-400">Elimination Score:</span>
-            <input
-              type="number"
-              value={maxScore}
-              onChange={(e) => setMaxScore(e.target.value === '' ? '' : parseInt(e.target.value))}
-              className="w-20 bg-transparent text-white font-bold font-mono text-right focus:outline-none"
-              min={50}
-              max={1000}
-            />
+          <div className="flex flex-col gap-2 bg-slate-950 px-4 py-3 rounded-xl border border-slate-800">
+            <div className="flex justify-between items-center w-full">
+              <span className="text-xs font-mono text-slate-400">Elimination Score:</span>
+              <input
+                type="number"
+                value={maxScore}
+                onChange={(e) => setMaxScore(e.target.value === '' ? '' : parseInt(e.target.value))}
+                className="w-20 bg-transparent text-white font-bold font-mono text-right focus:outline-none"
+                min={50}
+                max={1000}
+              />
+            </div>
+            <div className="w-full border-t border-slate-800/50" />
+            <div className="flex justify-between items-center w-full">
+              <span className="text-xs font-mono text-slate-400">Game Amount (₹):</span>
+              <input
+                type="number"
+                value={gameAmount}
+                onChange={(e) => setGameAmount(e.target.value === '' ? '' : parseInt(e.target.value))}
+                className="w-20 bg-transparent text-emerald-400 font-bold font-mono text-right focus:outline-none"
+                min={0}
+              />
+            </div>
           </div>
           <button
             onClick={handleCreate}

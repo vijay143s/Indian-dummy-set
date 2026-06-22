@@ -15,6 +15,7 @@ export const games = sqliteTable("games", {
   code: text("code").notNull().unique(), // Access code (e.g., 'DS-1029')
   status: text("status").notNull().default("waiting"), // 'waiting', 'toss', 'playing', 'round_finished', 'finished'
   maxScore: integer("max_score").notNull().default(200), // Elimination threshold
+  gameAmount: integer("game_amount").notNull().default(0), // Amount for the game
   currentTurnPlayerId: integer("current_turn_player_id"), // Reference to players.id
   dealerPlayerId: integer("dealer_player_id"), // Reference to players.id
   roundNumber: integer("round_number").notNull().default(1),

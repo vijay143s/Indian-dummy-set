@@ -43,6 +43,7 @@ export interface GameType {
   wildCardRank: string | null;
   winnerPlayerId: number | null;
   maxScore: number;
+  gameAmount: number;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
 }

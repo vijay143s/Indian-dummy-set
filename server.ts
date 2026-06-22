@@ -287,9 +287,9 @@ async function startServer() {
     });
 
     // Create a new lobby (Host action)
-    socket.on("createLobby", async (data: { mobile: string; username: string }, callback) => {
+    socket.on("createLobby", async (data: { mobile: string; username: string; maxScore: number; gameAmount: number }, callback) => {
       try {
-        const { mobile, username } = data;
+        const { mobile, username, maxScore, gameAmount } = data;
         if (!mobile || !username) {
           return callback({ error: "Mobile number and Name are required to create a lobby." });
         }
@@ -299,7 +299,7 @@ async function startServer() {
         await getOrCreateUser(uid, mobile, username);
 
         // Create game
-        const game = await createGame();
+        const game = await createGame(maxScore || 200, gameAmount || 0);
         callback({ success: true, gameCode: game.code });
       } catch (e: any) {
         console.error("Error creating lobby:", e);

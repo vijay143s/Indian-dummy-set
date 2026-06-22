@@ -117,14 +117,14 @@ export default function App() {
   };
 
   // Create new lobby action (Host)
-  const handleCreateGame = async (mobile: string, name: string) => {
+  const handleCreateGame = async (mobile: string, name: string, maxScore: number, gameAmount: number) => {
     if (!socketInstance) {
       setErrorMsg("Unable to create game: Connection currently inactive.");
       return;
     }
 
     try {
-      socketInstance.emit("createLobby", { mobile, username: name }, (resp: any) => {
+      socketInstance.emit("createLobby", { mobile, username: name, maxScore, gameAmount }, (resp: any) => {
         if (resp && resp.error) {
           setErrorMsg(resp.error);
         } else if (resp && resp.success) {

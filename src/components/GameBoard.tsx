@@ -808,7 +808,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             <span className="text-sm font-black tracking-lighter font-mono">DS</span>
           </div>
           <h1 className="text-lg font-bold tracking-tight uppercase text-white">
-            Indian Dummy Set <span className="text-slate-500 font-medium text-xs font-mono ml-2 hidden sm:inline">| Code: {game.code}</span>
+            Indian Dummy Set <span className="text-slate-500 font-medium text-xs font-mono ml-2 hidden sm:inline">| Code: {game.code} | Max: {game.maxScore || 200} | Amt: ₹{game.gameAmount || 0}</span>
           </h1>
         </div>
 
