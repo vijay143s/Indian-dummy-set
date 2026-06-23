@@ -67,7 +67,7 @@ export async function getGameById(id: number): Promise<GameType | null> {
 export async function updateGame(id: number, values: Partial<typeof games.$inferInsert>): Promise<GameType> {
   try {
     const result = await db.update(games)
-      .set({ ...values, updatedAt: new Date().toISOString() })
+      .set({ ...values, updatedAt: new Date() })
       .where(eq(games.id, id))
       .returning();
 
@@ -432,7 +432,7 @@ export async function createWildCardClaim(
         verifierPlayerId,
         cardRank,
         status: 'pending',
-        requestedAt: now.toISOString(),
+        requestedAt: now,
         expiresAt: expiresAt.toISOString(),
         cardIds: cardPayload,
       })
@@ -614,7 +614,7 @@ export async function getRecentGameEvents(gameId: number, limitCount: number = 1
 
     return list.map(e => ({
       ...e,
-      createdAt: e.createdAt ? e.createdAt : new Date().toISOString()
+      createdAt: e.createdAt ? e.createdAt : new Date()
     }));
   } catch (error) {
     console.error("Database error in getRecentGameEvents:", error);
