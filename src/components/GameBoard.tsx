@@ -116,11 +116,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         // Trigger browser notification
         if (typeof Notification !== 'undefined') {
           if (Notification.permission === 'granted') {
-            new Notification("Your Turn! 🃏", { body: "It's your turn to play in Indian Dummy Set!", icon: "/vite.svg" });
+            new Notification("Your Turn! 🃏", { body: `It's your turn to play in ${game.gameType === 'rummy' ? 'Indian Rummy' : 'Indian Dummy Set'}!`, icon: "/vite.svg" });
           } else if (Notification.permission !== 'denied') {
             Notification.requestPermission().then(permission => {
               if (permission === 'granted') {
-                new Notification("Your Turn! 🃏", { body: "It's your turn to play in Indian Dummy Set!", icon: "/vite.svg" });
+                new Notification("Your Turn! 🃏", { body: `It's your turn to play in ${game.gameType === 'rummy' ? 'Indian Rummy' : 'Indian Dummy Set'}!`, icon: "/vite.svg" });
               }
             });
           }
@@ -817,7 +817,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             <span className="text-sm font-black tracking-lighter font-mono">DS</span>
           </div>
           <h1 className="text-lg font-bold tracking-tight uppercase text-white">
-            Indian Dummy Set <span className="text-slate-500 font-medium text-xs font-mono ml-2 hidden sm:inline">| Code: {game.code} | Max: {game.maxScore || 200} | Amt: ₹{game.gameAmount || 0} | Score: {players.find(p => p.id === viewerPlayerId)?.score || 0}</span>
+            <div className="flex items-center">
+              {game.gameType === 'rummy' ? 'Indian Rummy' : 'Indian Dummy Set'} <span className="text-slate-500 font-medium text-xs font-mono ml-2 hidden sm:inline">| Code: {game.code} | Max: {game.maxScore || 200} | Amt: ₹{game.gameAmount || 0} | Score: {players.find(p => p.id === viewerPlayerId)?.score || 0}</span>
+            </div>
           </h1>
         </div>
 
@@ -1284,7 +1286,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               </div>
 
               {/* RIGHT ACTION: Claim Wild Card */}
-              {game.status === 'playing' && (
+              {game.status === 'playing' && game.gameType !== 'rummy' && (
                 <button
                   onClick={handleClaimWildCard}
                   id="claim-wildcards-btn"

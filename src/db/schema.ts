@@ -14,6 +14,7 @@ export const games = pgTable("games", {
   id: serial("id").primaryKey(),
   code: text("code").notNull().unique(), // Access code (e.g., 'DS-1029')
   status: text("status").notNull().default("waiting"), // 'waiting', 'toss', 'playing', 'round_finished', 'finished'
+  gameType: text("game_type").notNull().default("dummy_set"), // 'dummy_set' or 'rummy'
   maxScore: integer("max_score").notNull().default(200), // Elimination threshold
   gameAmount: integer("game_amount").notNull().default(0), // Amount for the game
   currentTurnPlayerId: integer("current_turn_player_id"), // Reference to players.id

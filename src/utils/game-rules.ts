@@ -166,10 +166,13 @@ export function isValidSet(cardsList: CardType[], allowWildcards: boolean = true
  * 3. The other groups can be pure sequences, impure sequences, or sets of same rank/different suits.
  * 4. All cards in hand must be arranged into valid melds (none left unmatched).
  */
-export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean = true): { isValid: boolean; error?: string } {
+export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean = true, gameType: string = 'dummy_set'): { isValid: boolean; error?: string } {
   if (groups.length === 0) {
     return { isValid: false, error: "Please group your cards into valid sets and sequences." };
   }
+
+  let pureSeqCount = 0;
+  let impureSeqCount = 0;
 
   for (let idx = 0; idx < groups.length; idx++) {
     const group = groups[idx];
@@ -178,12 +181,29 @@ export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean 
     const isImpure = isValidImpureSequence(group, isClaimant);
     const isMeldSet = isValidSet(group, isClaimant);
 
+    if (isPure) pureSeqCount++;
+    else if (isImpure) impureSeqCount++;
+
     if (!isPure && !isImpure && !isMeldSet) {
       const cardStrings = group.map(c => `${c.rank} of ${c.suit}${c.isWild ? ' (Wild)' : ''}${c.isHiddenWild ? ' (HiddenWild)' : ''}`);
       return { 
         isValid: false, 
         error: `Group ${idx + 1} is invalid. It does not form a valid Sequence or Set. (Cards checking: ${cardStrings.join(', ')})` 
       };
+    }
+  }
+
+  if (gameType === 'rummy') {
+    if (pureSeqCount < 1) {
+      return { isValid: false, error: "Invalid Declare: You must have at least one Pure Sequence (without jokers)." };
+    }
+    if ((pureSeqCount + impureSeqCount) < 2) {
+      return { isValid: false, error: "Invalid Declare: You must have at least two sequences (e.g. 1 Pure + 1 Impure)." };
+    }
+    
+    const totalCards = groups.reduce((sum, g) => sum + g.length, 0);
+    if (totalCards !== 13) {
+       return { isValid: false, error: `Invalid Declare: You must meld exactly 13 cards, but you grouped ${totalCards}.` };
     }
   }
 
@@ -224,7 +244,8 @@ export function calculateDetailedScoreBreakdown(
   groups: CardType[][],
   wildCardRank: string | null,
   wildCardSuit: string | null,
-  isClaimant: boolean = true
+  isClaimant: boolean = true,
+  gameType: string = 'dummy_set'
 ): GameScoreBreakdown {
   const melds: MeldScoreBreakdown[] = [];
   let totalPointsEarned = 0;
@@ -243,6 +264,9 @@ export function calculateDetailedScoreBreakdown(
 
   // Helper to check if a card is a wild card (paper wild card, joker card, marked isWild, or part of a 4-of-a-kind)
   const isWildCard = (c: CardType) => {
+    if (gameType === 'rummy') {
+      return c.rank === 'joker' || c.suit === 'joker' || (wildCardRank !== null && c.rank === wildCardRank);
+    }
     return c.rank === 'joker' || 
            c.suit === 'joker' || 
            c.isWild || 
@@ -260,6 +284,16 @@ export function calculateDetailedScoreBreakdown(
     return normals.every(c => c.rank === firstRank);
   });
 
+  // Check Rummy requirements for scoring
+  let rummyPureCount = 0;
+  let rummyImpureCount = 0;
+  if (gameType === 'rummy') {
+    groups.forEach(g => {
+      if (isValidPureSequence(g)) rummyPureCount++;
+      else if (isValidImpureSequence(g, isClaimant)) rummyImpureCount++;
+    });
+  }
+
   for (let idx = 0; idx < groups.length; idx++) {
     const group = groups[idx];
     if (group.length === 0) continue;
@@ -268,42 +302,57 @@ export function calculateDetailedScoreBreakdown(
     const wilds = group.filter(c => isWildCard(c));
 
     const isPure = isValidPureSequence(group);
-    // Non-claimants cannot use wildcards to form sets/sequences!
-    const isImpure = isValidImpureSequence(group, isClaimant);
+    // Non-claimants cannot use wildcards to form sets/sequences in Dummy Set!
+    // In Rummy, everyone can use wildcards (so pass true for rummy)
+    const canUseWilds = gameType === 'rummy' ? true : isClaimant;
+    const isImpure = isValidImpureSequence(group, canUseWilds);
 
     let isZeroPenaltySet = false;
     let customRuleMatched = '';
 
-    // Custom Rules Verification:
-    // 1. "4 same rank or value makes 0"
-    if (group.length === 4 && normals.length === 4 && normals.every(c => c.rank === normals[0].rank)) {
-      isZeroPenaltySet = true;
-      customRuleMatched = "4 Same Rank/Value Set";
-    }
-    // 2. "3 Same rank or value as 0"
-    else if (group.length === 3 && normals.length === 3 && normals.every(c => c.rank === normals[0].rank)) {
-      isZeroPenaltySet = true;
-      customRuleMatched = "3 Same Rank/Value Set";
-    }
-    // 3. "2 same rank or value and joker as 0"
-    else if (group.length === 3 && normals.length === 2 && normals[0].rank === normals[1].rank && wilds.some(c => c.rank === 'joker' || c.suit === 'joker')) {
-      isZeroPenaltySet = true;
-      customRuleMatched = "2 Same Rank + Joker Set";
-    }
-    // 4. "2 same rank or value and wild card makes zero if player has 4 same rank or value cards"
-    else if (group.length === 3 && normals.length === 2 && normals[0].rank === normals[1].rank && wilds.some(c => c.rank === wildCardRank || c.isWild || c.isHiddenWild)) {
-      if (hasFourOfAKind) {
+    if (gameType === 'dummy_set') {
+      // Custom Rules Verification:
+      // 1. "4 same rank or value makes 0"
+      if (group.length === 4 && normals.length === 4 && normals.every(c => c.rank === normals[0].rank)) {
         isZeroPenaltySet = true;
-        customRuleMatched = "2 Same Rank + Wild Card (4-of-a-Kind Bonus)";
-      } else {
-        isZeroPenaltySet = false;
-        customRuleMatched = "2 Same Rank + Wild Card (Needs 4-of-a-Kind Set)";
+        customRuleMatched = "4 Same Rank/Value Set";
+      }
+      // 2. "3 Same rank or value as 0"
+      else if (group.length === 3 && normals.length === 3 && normals.every(c => c.rank === normals[0].rank)) {
+        isZeroPenaltySet = true;
+        customRuleMatched = "3 Same Rank/Value Set";
+      }
+      // 3. "2 same rank or value and joker as 0"
+      else if (group.length === 3 && normals.length === 2 && normals[0].rank === normals[1].rank && wilds.some(c => c.rank === 'joker' || c.suit === 'joker')) {
+        isZeroPenaltySet = true;
+        customRuleMatched = "2 Same Rank + Joker Set";
+      }
+      // 4. "2 same rank or value and wild card makes zero if player has 4 same rank or value cards"
+      else if (group.length === 3 && normals.length === 2 && normals[0].rank === normals[1].rank && wilds.some(c => c.rank === wildCardRank || c.isWild || c.isHiddenWild)) {
+        if (hasFourOfAKind) {
+          isZeroPenaltySet = true;
+          customRuleMatched = "2 Same Rank + Wild Card (4-of-a-Kind Bonus)";
+        } else {
+          isZeroPenaltySet = false;
+          customRuleMatched = "2 Same Rank + Wild Card (Needs 4-of-a-Kind Set)";
+        }
       }
     }
 
     // Default valid check fallbacks if not matched by custom rule but valid general meld
-    const isValidGeneralSet = isValidSet(group.map(c => ({ ...c, isWild: isWildCard(c) })), isClaimant);
-    const isMeldValid = isPure || isImpure || isZeroPenaltySet || isValidGeneralSet;
+    const isValidGeneralSet = isValidSet(group.map(c => ({ ...c, isWild: isWildCard(c) })), canUseWilds);
+    let isMeldValid = isPure || isImpure || isZeroPenaltySet || isValidGeneralSet;
+
+    // Rummy strict validity penalty checks
+    if (gameType === 'rummy') {
+      if (rummyPureCount === 0) {
+        // No pure sequence = EVERYTHING is unmelded (penalized)
+        isMeldValid = false;
+      } else if (rummyPureCount > 0 && (rummyPureCount + rummyImpureCount) < 2) {
+        // Only pure sequences are valid, sets and impure sequences are penalized
+        if (!isPure) isMeldValid = false;
+      }
+    }
 
     // Calculate sum of card points (ignoring wildcards which are worth 0 points!)
     let cardValuesSum = 0;
@@ -321,14 +370,20 @@ export function calculateDetailedScoreBreakdown(
     }
 
     if (isMeldValid) {
-      const basePoints = isPure ? 100 : (isImpure ? 50 : 40);
+      const basePoints = gameType === 'rummy' ? 0 : (isPure ? 100 : (isImpure ? 50 : 40));
       const pointsEarned = basePoints + cardValuesSum;
       totalPointsEarned += pointsEarned;
       
-      let finalDesc = `Valid Set (+${basePoints} Base + ${cardValuesSum} face values)`;
-      if (isPure) finalDesc = `Pure Sequence (+${basePoints} Base + ${cardValuesSum} face values)`;
-      else if (isImpure) finalDesc = `Impure Sequence (+${basePoints} Base + ${cardValuesSum} face values)`;
-      else if (customRuleMatched) finalDesc = `${customRuleMatched} (+${basePoints} Base + ${cardValuesSum} face values)`;
+      let finalDesc = `Valid Set`;
+      if (gameType === 'dummy_set') {
+         finalDesc = `Valid Set (+${basePoints} Base + ${cardValuesSum} face values)`;
+         if (isPure) finalDesc = `Pure Sequence (+${basePoints} Base + ${cardValuesSum} face values)`;
+         else if (isImpure) finalDesc = `Impure Sequence (+${basePoints} Base + ${cardValuesSum} face values)`;
+         else if (customRuleMatched) finalDesc = `${customRuleMatched} (+${basePoints} Base + ${cardValuesSum} face values)`;
+      } else {
+         if (isPure) finalDesc = `Pure Sequence`;
+         else if (isImpure) finalDesc = `Impure Sequence`;
+      }
 
       melds.push({
         type: isPure ? 'pure_sequence' : (isImpure ? 'impure_sequence' : 'set'),

@@ -44,6 +44,7 @@ export interface GameType {
   winnerPlayerId: number | null;
   maxScore: number;
   gameAmount: number;
+  gameType: string;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
   isWildcardSelected?: boolean;

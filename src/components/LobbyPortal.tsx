@@ -3,7 +3,7 @@ import { LogIn, Plus, Shield, Phone, User as UserIcon } from 'lucide-react';
 
 interface LobbyPortalProps {
   onJoinGame: (code: string, mobile: string, name: string) => void;
-  onCreateGame: (mobile: string, name: string, maxScore: number) => void;
+  onCreateGame: (mobile: string, name: string, maxScore: number, gameAmount: number, gameType: string) => void;
   errorMsg: string | null;
 }
 
@@ -55,13 +55,23 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
     setTimeout(() => setSubmitting(false), 2000);
   };
 
-  const handleCreate = () => {
+  const handleCreateDummySet = () => {
     if (!validate()) return;
     setSubmitting(true);
     persistIdentity();
     const finalScore = typeof maxScore === 'number' ? maxScore : parseInt(maxScore) || 200;
     const finalAmount = typeof gameAmount === 'number' ? gameAmount : parseInt(gameAmount) || 0;
-    onCreateGame(mobile, name, finalScore, finalAmount);
+    onCreateGame(mobile, name, finalScore, finalAmount, 'dummy_set');
+    setTimeout(() => setSubmitting(false), 2000);
+  };
+
+  const handleCreateRummy = () => {
+    if (!validate()) return;
+    setSubmitting(true);
+    persistIdentity();
+    const finalScore = typeof maxScore === 'number' ? maxScore : parseInt(maxScore) || 200;
+    const finalAmount = typeof gameAmount === 'number' ? gameAmount : parseInt(gameAmount) || 0;
+    onCreateGame(mobile, name, finalScore, finalAmount, 'rummy');
     setTimeout(() => setSubmitting(false), 2000);
   };
 
@@ -182,15 +192,26 @@ export const LobbyPortal: React.FC<LobbyPortalProps> = ({
               />
             </div>
           </div>
-          <button
-            onClick={handleCreate}
-            disabled={submitting}
-            id="create-lobby-btn"
-            className="flex items-center justify-center gap-2 w-full py-3.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 text-indigo-400 border border-indigo-500/30 hover:border-indigo-400 font-sans font-bold text-sm transition-all duration-200 active:scale-95"
-          >
-            <Plus className="w-4 h-4" strokeWidth={3} />
-            Host a New Lobby Code
-          </button>
+          <div className="flex gap-2 w-full mt-2">
+            <button
+              onClick={handleCreateDummySet}
+              disabled={submitting}
+              id="create-dummy-set-btn"
+              className="flex items-center justify-center gap-2 flex-1 py-3.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 text-indigo-400 border border-indigo-500/30 hover:border-indigo-400 font-sans font-bold text-[11px] transition-all duration-200 active:scale-95"
+            >
+              <Plus className="w-4 h-4" strokeWidth={3} />
+              Host Dummy Set
+            </button>
+            <button
+              onClick={handleCreateRummy}
+              disabled={submitting}
+              id="create-rummy-btn"
+              className="flex items-center justify-center gap-2 flex-1 py-3.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-emerald-500/30 hover:border-emerald-400 font-sans font-bold text-[11px] transition-all duration-200 active:scale-95"
+            >
+              <Plus className="w-4 h-4" strokeWidth={3} />
+              Host Rummy
+            </button>
+          </div>
         </div>
       </div>
 

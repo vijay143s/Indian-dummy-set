@@ -103,7 +103,7 @@ async function startServer() {
 
           // Strip `isWild` flag if viewer is NOT the claimant (and round isn't finished)
           if (gameRaw.status !== 'finished' && gameRaw.status !== 'round_finished') {
-            if (!isWildcardClaimant) {
+            if (!isWildcardClaimant && gameRaw.gameType !== 'rummy') {
               cardCopy.isWild = false;
             }
           }
@@ -178,7 +178,7 @@ async function startServer() {
         const gameCopy = { ...gameRaw, isWildcardSelected: !!gameRaw.wildCardRank };
         
         // Mask the global wildcard rank from non-claimants until the round ends
-        if (gameRaw.status !== 'finished' && gameRaw.status !== 'round_finished') {
+        if (gameRaw.status !== 'finished' && gameRaw.status !== 'round_finished' && gameRaw.gameType !== 'rummy') {
           if (!isWildcardClaimant) {
             gameCopy.wildCardRank = null;
             gameCopy.wildCardSuit = null;
@@ -289,9 +289,9 @@ async function startServer() {
     });
 
     // Create a new lobby (Host action)
-    socket.on("createLobby", async (data: { mobile: string; username: string; maxScore: number; gameAmount: number }, callback) => {
+    socket.on("createLobby", async (data: { mobile: string; username: string; maxScore: number; gameAmount: number; gameType?: string }, callback) => {
       try {
-        const { mobile, username, maxScore, gameAmount } = data;
+        const { mobile, username, maxScore, gameAmount, gameType } = data;
         if (!mobile || !username) {
           return callback({ error: "Mobile number and Name are required to create a lobby." });
         }
@@ -301,7 +301,7 @@ async function startServer() {
         await getOrCreateUser(uid, mobile, username);
 
         // Create game
-        const game = await createGame(maxScore || 200, gameAmount || 0);
+        const game = await createGame(maxScore || 200, gameAmount || 0, gameType || 'dummy_set');
         callback({ success: true, gameCode: game.code });
       } catch (e: any) {
         console.error("Error creating lobby:", e);
@@ -763,6 +763,7 @@ async function startServer() {
         if (!game || game.status !== 'playing') {
           return callback({ error: "Game is not active." });
         }
+        if (game.gameType === 'rummy') return callback({ error: "Wildcard claiming is not allowed in Indian Rummy." });
 
 
 
@@ -930,7 +931,7 @@ async function startServer() {
             return { ...cardObj, isWild: isPaperJoker };
           }));
 
-          const validation = validateDeclareGroups(groupedCards, isWildcardClaimant);
+          const validation = validateDeclareGroups(groupedCards, isWildcardClaimant, game.gameType);
 
           if (!validation.isValid) {
             // Wrong declare! Apply 80 points penalty, but game continues!
@@ -978,7 +979,7 @@ async function startServer() {
             return { ...cardObj, isWild: isPaperJoker };
           }));
 
-          const breakdown = calculateDetailedScoreBreakdown(groupedCards, game.wildCardRank, game.wildCardSuit, isWildcardClaimant);
+          const breakdown = calculateDetailedScoreBreakdown(groupedCards, game.wildCardRank, game.wildCardSuit, isWildcardClaimant, game.gameType);
           const penalty = Math.min(breakdown.penaltyPoints, 80);
 
           // Update their penalty and status

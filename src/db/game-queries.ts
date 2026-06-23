@@ -12,7 +12,7 @@ function generateGameCode(): string {
 }
 
 // 1. Create a Game Lobby
-export async function createGame(maxScore: number = 200, gameAmount: number = 0): Promise<GameType> {
+export async function createGame(maxScore: number = 200, gameAmount: number = 0, gameType: string = 'dummy_set'): Promise<GameType> {
   try {
     const code = generateGameCode();
     const result = await db.insert(games)
@@ -21,6 +21,7 @@ export async function createGame(maxScore: number = 200, gameAmount: number = 0)
         status: 'waiting',
         maxScore,
         gameAmount,
+        gameType,
         roundNumber: 1,
       })
       .returning();
