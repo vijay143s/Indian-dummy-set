@@ -890,6 +890,12 @@ async function startServer() {
         const myHand = allCards.filter(c => c.ownerPlayerId === pId && c.location === 'hand');
         const gamePlayersList = await getGamePlayers(gId);
 
+        // Compute if player is a claimant
+        const completedClaims = await db.select().from(wildCardClaims).where(and(eq(wildCardClaims.gameId, gId), eq(wildCardClaims.status, 'completed')));
+        const approvedClaimantIds = new Set(completedClaims.map(c => c.claimantPlayerId));
+        const wcCard = allCards.find(c => c.location === 'wildcard_slot');
+        const isWildcardClaimant = (wcCard && wcCard.ownerPlayerId === pId) || approvedClaimantIds.has(pId);
+
         // 1. IS THIS THE WINNING DECLARE? (i.e. No winner declared yet)
         if (game.winnerPlayerId === null) {
           // Identify the finish card if there are 14 cards
@@ -917,20 +923,14 @@ async function startServer() {
           }
 
           // Compute joker substitutions
-          const rankCounts: Record<string, number> = {};
-          for (const card of handToValidate) {
-            if (card.rank !== 'joker' && card.suit !== 'joker') rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
-          }
-          const fourOfAKindRanks = Object.keys(rankCounts).filter(r => rankCounts[r] >= 4);
-
           const groupedCards: CardType[][] = melsToValidate.map(grp => grp.map(id => {
             const cardObj = handToValidate.find(c => c.id === id);
             if (!cardObj) throw new Error("Invalid card");
-            const isPaperJoker = cardObj.isWild || cardObj.isHiddenWild || cardObj.rank === game.wildCardRank || cardObj.suit === 'joker' || cardObj.rank === 'joker' || fourOfAKindRanks.includes(cardObj.rank);
+            const isPaperJoker = cardObj.isWild || cardObj.isHiddenWild || cardObj.rank === game.wildCardRank || cardObj.suit === 'joker' || cardObj.rank === 'joker';
             return { ...cardObj, isWild: isPaperJoker };
           }));
 
-          const validation = validateDeclareGroups(groupedCards);
+          const validation = validateDeclareGroups(groupedCards, isWildcardClaimant);
 
           if (!validation.isValid) {
             // Wrong declare! Apply 80 points penalty, but game continues!
@@ -971,20 +971,14 @@ async function startServer() {
         } else {
           // 2. SUBSEQUENT DECLARE (Minimizing Penalty Points)
           // We don't validate groups for a win, we just calculate the penalty score!
-          const rankCounts: Record<string, number> = {};
-          for (const card of myHand) {
-            if (card.rank !== 'joker' && card.suit !== 'joker') rankCounts[card.rank] = (rankCounts[card.rank] || 0) + 1;
-          }
-          const fourOfAKindRanks = Object.keys(rankCounts).filter(r => rankCounts[r] >= 4);
-
           const groupedCards: CardType[][] = mels.map(grp => grp.map(id => {
             const cardObj = myHand.find(c => c.id === id);
             if (!cardObj) throw new Error("Invalid card");
-            const isPaperJoker = cardObj.isWild || cardObj.isHiddenWild || cardObj.rank === game.wildCardRank || cardObj.suit === 'joker' || cardObj.rank === 'joker' || fourOfAKindRanks.includes(cardObj.rank);
+            const isPaperJoker = cardObj.isWild || cardObj.isHiddenWild || cardObj.rank === game.wildCardRank || cardObj.suit === 'joker' || cardObj.rank === 'joker';
             return { ...cardObj, isWild: isPaperJoker };
           }));
 
-          const breakdown = calculateDetailedScoreBreakdown(groupedCards, game.wildCardRank, game.wildCardSuit);
+          const breakdown = calculateDetailedScoreBreakdown(groupedCards, game.wildCardRank, game.wildCardSuit, isWildcardClaimant);
           const penalty = Math.min(breakdown.penaltyPoints, 80);
 
           // Update their penalty and status

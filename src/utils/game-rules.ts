@@ -84,8 +84,9 @@ export function isValidPureSequence(cardsList: CardType[]): boolean {
  * Must contain 3 or more cards of the same suit, incorporating at least one
  * joker/wildcard substituting intermediate missing items.
  */
-export function isValidImpureSequence(cardsList: CardType[]): boolean {
+export function isValidImpureSequence(cardsList: CardType[], allowWildcards: boolean = true): boolean {
   if (cardsList.length < 3) return false;
+  if (!allowWildcards) return false; // Impure sequence fundamentally requires wildcards
 
   // Separate normal cards and wild/jokers
   const normals = cardsList.filter(c => c.suit !== 'joker' && c.rank !== 'joker' && !c.isWild && !c.isHiddenWild);
@@ -136,10 +137,15 @@ export function isValidImpureSequence(cardsList: CardType[]): boolean {
  * Must contain 3 or 4 cards of the same rank but with different suits.
  * Jokers/Wildcards can substitute any missing card.
  */
-export function isValidSet(cardsList: CardType[]): boolean {
+export function isValidSet(cardsList: CardType[], allowWildcards: boolean = true): boolean {
   if (cardsList.length < 3) return false;
 
   const normals = cardsList.filter(c => c.suit !== 'joker' && c.rank !== 'joker' && !c.isWild && !c.isHiddenWild);
+  
+  if (!allowWildcards && normals.length !== cardsList.length) {
+    return false; // If wildcards are not allowed, all cards must be normal
+  }
+
   if (normals.length === 0) return true; // All wild cards form a set
 
   // All normal cards must have the same rank
@@ -160,7 +166,7 @@ export function isValidSet(cardsList: CardType[]): boolean {
  * 3. The other groups can be pure sequences, impure sequences, or sets of same rank/different suits.
  * 4. All cards in hand must be arranged into valid melds (none left unmatched).
  */
-export function validateDeclareGroups(groups: CardType[][]): { isValid: boolean; error?: string } {
+export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean = true): { isValid: boolean; error?: string } {
   if (groups.length === 0) {
     return { isValid: false, error: "Please group your cards into valid sets and sequences." };
   }
@@ -169,8 +175,8 @@ export function validateDeclareGroups(groups: CardType[][]): { isValid: boolean;
     const group = groups[idx];
     
     const isPure = isValidPureSequence(group);
-    const isImpure = isValidImpureSequence(group);
-    const isMeldSet = isValidSet(group);
+    const isImpure = isValidImpureSequence(group, isClaimant);
+    const isMeldSet = isValidSet(group, isClaimant);
 
     if (!isPure && !isImpure && !isMeldSet) {
       const cardStrings = group.map(c => `${c.rank} of ${c.suit}${c.isWild ? ' (Wild)' : ''}${c.isHiddenWild ? ' (HiddenWild)' : ''}`);
@@ -217,7 +223,8 @@ export interface GameScoreBreakdown {
 export function calculateDetailedScoreBreakdown(
   groups: CardType[][],
   wildCardRank: string | null,
-  wildCardSuit: string | null
+  wildCardSuit: string | null,
+  isClaimant: boolean = true
 ): GameScoreBreakdown {
   const melds: MeldScoreBreakdown[] = [];
   let totalPointsEarned = 0;
@@ -240,8 +247,7 @@ export function calculateDetailedScoreBreakdown(
            c.suit === 'joker' || 
            c.isWild || 
            c.isHiddenWild || 
-           (wildCardRank !== null && c.rank === wildCardRank) ||
-           fourOfAKindRanks.includes(c.rank);
+           (wildCardRank !== null && c.rank === wildCardRank);
   };
 
   // Check if player has at least one group of "4 same rank or value cards"
@@ -262,7 +268,8 @@ export function calculateDetailedScoreBreakdown(
     const wilds = group.filter(c => isWildCard(c));
 
     const isPure = isValidPureSequence(group);
-    const isImpure = isValidImpureSequence(group);
+    // Non-claimants cannot use wildcards to form sets/sequences!
+    const isImpure = isValidImpureSequence(group, isClaimant);
 
     let isZeroPenaltySet = false;
     let customRuleMatched = '';
@@ -295,7 +302,7 @@ export function calculateDetailedScoreBreakdown(
     }
 
     // Default valid check fallbacks if not matched by custom rule but valid general meld
-    const isValidGeneralSet = isValidSet(group.map(c => ({ ...c, isWild: isWildCard(c) })));
+    const isValidGeneralSet = isValidSet(group.map(c => ({ ...c, isWild: isWildCard(c) })), isClaimant);
     const isMeldValid = isPure || isImpure || isZeroPenaltySet || isValidGeneralSet;
 
     // Calculate sum of card points (ignoring wildcards which are worth 0 points!)
