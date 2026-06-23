@@ -492,7 +492,7 @@ async function startServer() {
              score: 0, 
              hasDeclared: false, 
              hasDropped: false,
-             updatedAt: new Date().toISOString()
+             updatedAt: new Date()
            }).where(eq(playerHands.playerId, p.id));
         }
 
@@ -660,7 +660,7 @@ async function startServer() {
 
         // Apply drop status to PlayerHand
         await db.update(playerHands)
-          .set({ score: penalty, hasDropped: true, updatedAt: new Date().toISOString() })
+          .set({ score: penalty, hasDropped: true, updatedAt: new Date() })
           .where(eq(playerHands.playerId, pId));
 
         await saveGameEvent(gId, pId, dropType, { penalty });
@@ -676,7 +676,7 @@ async function startServer() {
           const winner = activeNonDropped[0];
           
           await db.update(playerHands)
-            .set({ score: 0, hasDeclared: true, updatedAt: new Date().toISOString() })
+            .set({ score: 0, hasDeclared: true, updatedAt: new Date() })
             .where(eq(playerHands.playerId, winner.id));
           
           await updateGame(gId, { winnerPlayerId: winner.id });
@@ -935,7 +935,7 @@ async function startServer() {
           if (!validation.isValid) {
             // Wrong declare! Apply 80 points penalty, but game continues!
             await saveGameEvent(gId, pId, 'invalid_declare', { error: validation.error || "Wrong declare" });
-            await db.update(playerHands).set({ score: 80, hasDeclared: true, updatedAt: new Date().toISOString() }).where(eq(playerHands.playerId, pId));
+            await db.update(playerHands).set({ score: 80, hasDeclared: true, updatedAt: new Date() }).where(eq(playerHands.playerId, pId));
             
             // Advance turn to next player
             const droppedIds = new Set(gamePlayersList.filter(p => p.hasDropped).map(p => p.id));
@@ -962,7 +962,7 @@ async function startServer() {
             await db.update(cards).set({ location: 'discard', position: nextPos, ownerPlayerId: null }).where(eq(cards.id, actualFinishCardId));
           }
 
-          await db.update(playerHands).set({ score: 0, hasDeclared: true, updatedAt: new Date().toISOString() }).where(eq(playerHands.playerId, pId));
+          await db.update(playerHands).set({ score: 0, hasDeclared: true, updatedAt: new Date() }).where(eq(playerHands.playerId, pId));
           await updateGame(gId, { winnerPlayerId: pId });
           await saveGameEvent(gId, pId, 'finish_round', { winnerPlayerId: pId, score: 0 });
           
@@ -988,7 +988,7 @@ async function startServer() {
           const penalty = Math.min(breakdown.penaltyPoints, 80);
 
           // Update their penalty and status
-          await db.update(playerHands).set({ score: penalty, hasDeclared: true, updatedAt: new Date().toISOString() }).where(eq(playerHands.playerId, pId));
+          await db.update(playerHands).set({ score: penalty, hasDeclared: true, updatedAt: new Date() }).where(eq(playerHands.playerId, pId));
           
           callback({ isValid: true });
         }
