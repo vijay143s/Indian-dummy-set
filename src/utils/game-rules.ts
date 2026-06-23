@@ -84,12 +84,14 @@ export function isValidPureSequence(cardsList: CardType[]): boolean {
  * Must contain 3 or more cards of the same suit, incorporating at least one
  * joker/wildcard substituting intermediate missing items.
  */
-export function isValidImpureSequence(cardsList: CardType[], allowWildcards: boolean = true): boolean {
+export function isValidImpureSequence(cardsList: CardType[], allowWildcards: boolean = true, wildCardRank: string | null = null): boolean {
   if (cardsList.length < 3) return false;
   if (!allowWildcards) return false; // Impure sequence fundamentally requires wildcards
 
+  const isWildCard = (c: CardType) => c.suit === 'joker' || c.rank === 'joker' || c.isWild || c.isHiddenWild || (wildCardRank !== null && c.rank === wildCardRank);
+
   // Separate normal cards and wild/jokers
-  const normals = cardsList.filter(c => c.suit !== 'joker' && c.rank !== 'joker' && !c.isWild && !c.isHiddenWild);
+  const normals = cardsList.filter(c => !isWildCard(c));
   const wildCount = cardsList.length - normals.length;
 
   if (normals.length === 0) return true; // All wildcards is theoretically valid
@@ -137,10 +139,11 @@ export function isValidImpureSequence(cardsList: CardType[], allowWildcards: boo
  * Must contain 3 or 4 cards of the same rank but with different suits.
  * Jokers/Wildcards can substitute any missing card.
  */
-export function isValidSet(cardsList: CardType[], allowWildcards: boolean = true): boolean {
+export function isValidSet(cardsList: CardType[], allowWildcards: boolean = true, wildCardRank: string | null = null): boolean {
   if (cardsList.length < 3) return false;
 
-  const normals = cardsList.filter(c => c.suit !== 'joker' && c.rank !== 'joker' && !c.isWild && !c.isHiddenWild);
+  const isWildCard = (c: CardType) => c.suit === 'joker' || c.rank === 'joker' || c.isWild || c.isHiddenWild || (wildCardRank !== null && c.rank === wildCardRank);
+  const normals = cardsList.filter(c => !isWildCard(c));
   
   if (!allowWildcards && normals.length !== cardsList.length) {
     return false; // If wildcards are not allowed, all cards must be normal
@@ -166,7 +169,12 @@ export function isValidSet(cardsList: CardType[], allowWildcards: boolean = true
  * 3. The other groups can be pure sequences, impure sequences, or sets of same rank/different suits.
  * 4. All cards in hand must be arranged into valid melds (none left unmatched).
  */
-export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean = true, gameType: string = 'dummy_set'): { isValid: boolean; error?: string } {
+export function validateDeclareGroups(
+  groups: CardType[][], 
+  isClaimant: boolean = true, 
+  gameType: string = 'dummy_set',
+  wildCardRank: string | null = null
+): { isValid: boolean; error?: string } {
   if (groups.length === 0) {
     return { isValid: false, error: "Please group your cards into valid sets and sequences." };
   }
@@ -174,12 +182,14 @@ export function validateDeclareGroups(groups: CardType[][], isClaimant: boolean 
   let pureSeqCount = 0;
   let impureSeqCount = 0;
 
+  const canUseWilds = gameType === 'rummy' ? true : isClaimant;
+
   for (let idx = 0; idx < groups.length; idx++) {
     const group = groups[idx];
     
     const isPure = isValidPureSequence(group);
-    const isImpure = isValidImpureSequence(group, isClaimant);
-    const isMeldSet = isValidSet(group, isClaimant);
+    const isImpure = isValidImpureSequence(group, canUseWilds, wildCardRank);
+    const isMeldSet = isValidSet(group, canUseWilds, wildCardRank);
 
     if (isPure) pureSeqCount++;
     else if (isImpure) impureSeqCount++;
@@ -290,7 +300,7 @@ export function calculateDetailedScoreBreakdown(
   if (gameType === 'rummy') {
     groups.forEach(g => {
       if (isValidPureSequence(g)) rummyPureCount++;
-      else if (isValidImpureSequence(g, isClaimant)) rummyImpureCount++;
+      else if (isValidImpureSequence(g, true, wildCardRank)) rummyImpureCount++;
     });
   }
 
@@ -305,7 +315,7 @@ export function calculateDetailedScoreBreakdown(
     // Non-claimants cannot use wildcards to form sets/sequences in Dummy Set!
     // In Rummy, everyone can use wildcards (so pass true for rummy)
     const canUseWilds = gameType === 'rummy' ? true : isClaimant;
-    const isImpure = isValidImpureSequence(group, canUseWilds);
+    const isImpure = isValidImpureSequence(group, canUseWilds, wildCardRank);
 
     let isZeroPenaltySet = false;
     let customRuleMatched = '';
@@ -340,7 +350,7 @@ export function calculateDetailedScoreBreakdown(
     }
 
     // Default valid check fallbacks if not matched by custom rule but valid general meld
-    const isValidGeneralSet = isValidSet(group.map(c => ({ ...c, isWild: isWildCard(c) })), canUseWilds);
+    const isValidGeneralSet = isValidSet(group, canUseWilds, wildCardRank);
     let isMeldValid = isPure || isImpure || isZeroPenaltySet || isValidGeneralSet;
 
     // Rummy strict validity penalty checks
@@ -399,6 +409,13 @@ export function calculateDetailedScoreBreakdown(
     } else {
       // Unmelded group. Remaining cards should sum up penalty!
       penaltyPoints += cardValuesSum;
+      let desc = 'Invalid Group';
+      if (gameType === 'rummy') {
+        if (isPure) desc = 'Pure Sequence (Need 1 more Sequence)';
+        else if (isImpure) desc = 'Impure Sequence (Sequence Required)';
+        else if (isValidGeneralSet) desc = 'Set (Sequence Required)';
+      }
+
       melds.push({
         type: 'unmelded',
         cards: group,
@@ -408,9 +425,9 @@ export function calculateDetailedScoreBreakdown(
         basePoints: 0,
         cardValuesSum,
         pointsEarned: 0,
-        description: customRuleMatched === "2 Same Rank + Wild Card (Needs 4-of-a-Kind Set)"
+        description: gameType === 'dummy_set' && customRuleMatched === "2 Same Rank + Wild Card (Needs 4-of-a-Kind Set)"
           ? `Unmelded Set (Needs 4-of-a-Kind to unlock Wild Card, Penalty: -${cardValuesSum} pts)`
-          : `Unmelded/Mismatch (Penalty: -${cardValuesSum} pts)`
+          : (gameType === 'rummy' ? desc : `Unmelded/Mismatch (Penalty: -${cardValuesSum} pts)`)
       });
     }
   }
@@ -425,4 +442,164 @@ export function calculateDetailedScoreBreakdown(
     penaltyPoints: finalPenalty,
     netScore
   };
+}
+
+/**
+ * Automatically group cards into the optimal Rummy arrangement using subset generation and DFS backtracking.
+ */
+export function autoGroupRummyHand(cards: CardType[], wildCardRank: string | null): number[][] {
+  const isCardWild = (c: CardType) => c.suit === 'joker' || c.rank === 'joker' || c.isWild || c.isHiddenWild || (wildCardRank && c.rank === wildCardRank);
+
+  const pureSequences: CardType[][] = [];
+  const sets: CardType[][] = [];
+  const impureSequences: CardType[][] = [];
+
+  const n = cards.length;
+  // 1. Generate all valid melds from subsets
+  for (let mask = 1; mask < (1 << n); mask++) {
+    const subset: CardType[] = [];
+    for (let i = 0; i < n; i++) {
+      if (mask & (1 << i)) {
+        subset.push(cards[i]);
+      }
+    }
+    
+    if (subset.length < 3) continue;
+
+    // Check classification
+    const pure = isValidPureSequence(subset);
+    if (pure) {
+      pureSequences.push(subset);
+      continue;
+    }
+
+    const set = isValidSet(subset, true, wildCardRank);
+    if (set) {
+      sets.push(subset);
+      continue;
+    }
+
+    const impure = isValidImpureSequence(subset, true, wildCardRank);
+    if (impure) {
+      impureSequences.push(subset);
+    }
+  }
+
+  // 2. DFS search through candidates
+  let bestGroups: CardType[][] | null = null;
+  let minDeadwoodPoints = Infinity;
+  let maxCardsGrouped = -1;
+
+  const candidates = [...pureSequences, ...sets, ...impureSequences];
+
+  function dfs(cardsLeft: CardType[], currentGroups: CardType[][], startIndex: number) {
+    const groupedCount = currentGroups.reduce((sum, g) => sum + g.length, 0);
+    const deadwoodPoints = cardsLeft.reduce((sum, c) => sum + getCardScoreValue(c.rank, isCardWild(c)), 0);
+
+    if (deadwoodPoints < minDeadwoodPoints || (deadwoodPoints === minDeadwoodPoints && groupedCount > maxCardsGrouped)) {
+      minDeadwoodPoints = deadwoodPoints;
+      maxCardsGrouped = groupedCount;
+      bestGroups = [...currentGroups];
+    }
+
+    if (cardsLeft.length === 0) return;
+
+    for (let i = startIndex; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      const candidateIds = candidate.map(c => c.id);
+      const leftIds = cardsLeft.map(c => c.id);
+      
+      if (candidateIds.every(id => leftIds.includes(id))) {
+        const nextCardsLeft = cardsLeft.filter(c => !candidateIds.includes(c.id));
+        dfs(nextCardsLeft, [...currentGroups, candidate], i + 1);
+      }
+    }
+  }
+
+  dfs(cards, [], 0);
+
+  // 3. Convert bestGroups back to IDs
+  const result: number[][] = [];
+  const usedIds = new Set<number>();
+  if (bestGroups) {
+    for (const group of bestGroups) {
+      const ids = group.map(c => c.id);
+      result.push(ids);
+      ids.forEach(id => usedIds.add(id));
+    }
+  }
+
+  // 4. Intelligently group remaining deadwood cards
+  const deadwoodCards = cards.filter(c => !usedIds.has(c.id));
+  const deadwoodWilds = deadwoodCards.filter(isCardWild);
+  let remainingDeadwood = deadwoodCards.filter(c => !isCardWild(c));
+  
+  const deadwoodGroups: number[][] = [];
+  const suits = ['hearts', 'diamonds', 'clubs', 'spades'];
+
+  // Priority 4: Sequence Potential (Strictly Consecutive)
+  for (const suit of suits) {
+    let suitCards = remainingDeadwood.filter(c => c.suit === suit).sort((a,b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank]);
+    let currentCluster: CardType[] = [];
+    
+    for (let i = 0; i < suitCards.length; i++) {
+      if (currentCluster.length === 0) {
+        currentCluster.push(suitCards[i]);
+      } else {
+        const lastRank = RANK_VALUES[currentCluster[currentCluster.length - 1].rank];
+        const currRank = RANK_VALUES[suitCards[i].rank];
+        if (currRank - lastRank === 1) { 
+          currentCluster.push(suitCards[i]);
+        } else {
+          if (currentCluster.length >= 2) {
+             deadwoodGroups.push(currentCluster.map(c => c.id));
+             remainingDeadwood = remainingDeadwood.filter(c => !currentCluster.includes(c));
+          }
+          currentCluster = [suitCards[i]];
+        }
+      }
+    }
+    if (currentCluster.length >= 2) {
+      deadwoodGroups.push(currentCluster.map(c => c.id));
+      remainingDeadwood = remainingDeadwood.filter(c => !currentCluster.includes(c));
+    }
+  }
+
+  // Priority 2: Same Rank Pairs
+  const ranks = Object.keys(RANK_VALUES).filter(r => r !== 'joker');
+  for (const rank of ranks) {
+    const rankCards = remainingDeadwood.filter(c => c.rank === rank);
+    if (rankCards.length >= 2) {
+      deadwoodGroups.push(rankCards.map(c => c.id));
+      remainingDeadwood = remainingDeadwood.filter(c => !rankCards.includes(c));
+    }
+  }
+
+  // Priority 1 & 3: Same Suit, Sorted by Rank
+  for (const suit of suits) {
+    const suitCards = remainingDeadwood.filter(c => c.suit === suit).sort((a,b) => RANK_VALUES[a.rank] - RANK_VALUES[b.rank]);
+    if (suitCards.length > 0) {
+      deadwoodGroups.push(suitCards.map(c => c.id));
+      remainingDeadwood = remainingDeadwood.filter(c => !suitCards.includes(c));
+    }
+  }
+
+  // Priority 5: Attach Wildcards
+  if (deadwoodWilds.length > 0) {
+    if (deadwoodGroups.length > 0) {
+      // Attach to the first deadwood group
+      for (const w of deadwoodWilds) {
+        deadwoodGroups[0].push(w.id);
+      }
+    } else {
+      deadwoodGroups.push(deadwoodWilds.map(w => w.id));
+    }
+  }
+
+  // Safety fallback
+  for (const c of remainingDeadwood) {
+    deadwoodGroups.push([c.id]);
+  }
+
+  return [...result, ...deadwoodGroups];
 }

@@ -3,15 +3,18 @@ import { GameStateResponse, CardType, PlayerType } from '../types.ts';
 import { CardVisual } from './CardVisual.tsx';
 import { VoiceRoom, VideoPlayer } from './VoiceRoom.tsx';
 import { 
+  isValidPureSequence, 
+  isValidImpureSequence, 
+  isValidSet, 
   calculateDetailedScoreBreakdown,
-  isValidPureSequence,
-  isValidImpureSequence,
-  isValidSet
+  autoGroupRummyHand
 } from '../utils/game-rules.ts';
 import { 
   Timer, Crown, LogOut, CheckCircle2, UserCircle2, Swords, History, Clock, AlertCircle, Play, ArrowRight, Check, X, ShieldAlert,
   FolderLock, Archive, ListCollapse, Sparkles, Award, Menu, Trophy, Volume2, VolumeX
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { playCardDrawSound, playCardDiscardSound } from '../utils/audio.ts';
 
 interface GameBoardProps {
   gameState: GameStateResponse;
@@ -250,6 +253,15 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
   }, [successInfo]);
 
+  // Helper to dynamically attach the 'isWild' badge to cards that match the Rummy global wildcard
+  const getCardWithDynamicWildState = (c: CardType): CardType => {
+    if (!c) return c;
+    if (game.gameType === 'rummy' && game.wildCardRank && c.rank === game.wildCardRank) {
+      return { ...c, isWild: true };
+    }
+    return c;
+  };
+
   // Synchronize hand card groups to server on change (supports audit score calculation!)
   useEffect(() => {
     if (localGroups.length > 0 && game.status === 'playing') {
@@ -280,6 +292,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
   // Draw card from sources
   const handleDraw = (source: 'deck' | 'discard') => {
+    playCardDrawSound();
     onEmit("drawCard", { source }, (resp: any) => {
       if (resp && resp.error) {
         setActionError(resp.error);
@@ -298,6 +311,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }
 
     const targetId = selectedCardIds[0];
+    playCardDiscardSound();
     onEmit("discardCard", { cardId: targetId }, (resp: any) => {
       if (resp && resp.error) {
         setActionError(resp.error);
@@ -601,6 +615,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   const topDiscardCard = discards.length > 0 
     ? discards.sort((a, b) => b.position - a.position)[0] 
     : null;
+
+  // Pre-calculate score breakdown for hand
+  const currentHandGroupsCards = localGroups.map(grp => myHandCards.filter(c => grp.includes(c.id)));
+  const currentBreakdown = calculateDetailedScoreBreakdown(currentHandGroupsCards, game.wildCardRank, game.wildCardSuit, true, game.gameType);
 
   // LOBBY DISPLAY STATE (WAITING STATUS)
   if (game.status === 'waiting') {
@@ -1075,20 +1093,20 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             )}
 
             {/* Designated Wildcard Panel */}
-            <div className="absolute top-4 right-4 bg-slate-900 border border-slate-800 p-2.5 rounded-xl flex items-center gap-3 shadow-2xl z-10 transition-transform hover:scale-102 duration-300">
-              <div className="flex flex-col">
-                <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 font-bold">Game Wild Card</span>
+            <div className="absolute top-4 right-4 bg-slate-900 border border-slate-800 p-3 rounded-xl flex items-center gap-4 shadow-2xl z-10 transition-transform hover:scale-105 duration-300">
+              <div className="flex flex-col items-end">
+                <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 font-bold mb-1">Game Wild Card</span>
                 <span className="text-xs font-sans font-black text-amber-400 tracking-tight uppercase">
-                  {game.wildCardRank ? `${game.wildCardRank} of ${game.wildCardSuit}s` : ""}
+                  {game.wildCardRank ? `${game.wildCardRank} of ${game.wildCardSuit}` : ""}
                 </span>
               </div>
               {game.wildCardRank ? (
-                <div className="w-8 h-12 bg-white rounded border-2 border-slate-300 text-slate-900 flex flex-col items-center justify-center p-0.5 leading-none select-none shadow">
-                  <span className="text-xs font-sans font-black leading-none">{game.wildCardRank}</span>
-                  <span className="text-[9px] uppercase font-mono tracking-tighter scale-90 mt-0.5 font-bold">{game.wildCardSuit?.substring(0, 3)}</span>
-                </div>
+                <CardVisual 
+                  card={{ id: 'wild-card-display', rank: game.wildCardRank, suit: game.wildCardSuit || 'spades', isWild: false, isHiddenWild: false } as any} 
+                  size="sm" 
+                />
               ) : (
-                <div className="w-8 h-12 bg-slate-955 text-slate-500 rounded border-2 border-dashed border-slate-805 flex items-center justify-center text-xs font-sans font-black leading-none shadow select-none">
+                <div className="w-16 h-24 bg-slate-900/50 text-slate-600 rounded-md border-2 border-dashed border-slate-700 flex items-center justify-center text-xl font-sans font-black shadow-inner select-none">
                   ?
                 </div>
               )}
@@ -1123,7 +1141,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                           );
                           return (
                             <div className="animate-in flip-in-y duration-500 shadow-2xl">
-                              <CardVisual card={tCard} size="sm" />
+                              <div className="shrink-0 transform transition hover:-translate-y-2 hover:z-20 cursor-pointer">
+                                <CardVisual card={getCardWithDynamicWildState(tCard)} size="sm" />
+                              </div>
                             </div>
                           );
                         })()}
@@ -1181,7 +1201,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               {/* LEFT ACTION: Auto Group */}
               {game.status === 'playing' && (
                 <button
-                  onClick={handleAutoGroup}
+                  onClick={() => {
+                    const newGroups = autoGroupRummyHand(myHandCards, game.wildCardRank);
+                    setLocalGroups(newGroups);
+                  }}
                   id="auto-group-btn"
                   disabled={hasViewerDeclared}
                   className="shrink-0 px-2 sm:px-3 py-2 sm:py-3 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white font-sans text-[9px] sm:text-[10px] lg:text-xs font-bold rounded-xl transition border border-indigo-500/30 flex items-center gap-1 sm:gap-1.5 active:scale-95 cursor-pointer shadow whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1197,7 +1220,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               <div className="flex gap-2 sm:gap-4 lg:gap-14 items-start flex-nowrap justify-center shrink-0">
                 
                 {/* Discard Log History (Left side) */}
-                <div className="flex flex-col items-center gap-1.5 relative shrink-0">
+                <div className="flex flex-col items-center gap-1.5 relative shrink-0 z-[100]">
                   <span 
                     className="text-[9px] font-mono text-purple-200/50 font-black uppercase tracking-widest cursor-pointer hover:text-purple-100 flex items-center gap-1"
                     onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
@@ -1214,8 +1237,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                       <div className="w-16 h-24 lg:w-24 lg:h-36 relative hover:scale-105 transition-transform duration-200">
                         <div className="absolute top-0 left-0 flex items-center gap-2 transform scale-[0.66] origin-top-left lg:scale-100 lg:origin-center">
                           <div className="relative">
-                            <CardVisual card={discardHistoryCards[discardHistoryCards.length - 1]} />
-                            <div className="absolute inset-0 bg-slate-950/60 rounded-lg flex items-center justify-center">
+                                     <AnimatePresence mode="popLayout">
+                        <motion.div 
+                          key={`open-discard-${discardHistoryCards[discardHistoryCards.length - 1].id}`}
+                          initial={{ opacity: 0, scale: 0.5, rotate: -15, x: -30 }}
+                          animate={{ opacity: 1, scale: 1, rotate: 0, x: 0 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                          className="transform hover:scale-105 transition-transform duration-200"
+                        >
+                          <CardVisual 
+                            card={getCardWithDynamicWildState(discardHistoryCards[discardHistoryCards.length - 1])} 
+                            size="md" 
+                          />
+                        </motion.div>
+                      </AnimatePresence>                          <div className="absolute inset-0 bg-slate-950/60 rounded-lg flex items-center justify-center">
                                <span className="text-white font-black text-2xl">+{discardHistoryCards.length}</span>
                             </div>
                           </div>
@@ -1230,14 +1266,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
                   {/* Expanded Dropdown */}
                   {isHistoryExpanded && discardHistoryCards.length > 0 && (
-                    <div className="absolute top-[calc(100%+8px)] left-0 bg-slate-900/95 border border-slate-700 p-2 rounded-xl shadow-2xl z-[60] flex flex-col gap-1 max-h-48 overflow-y-auto animate-fade-in w-28 md:w-40 custom-scrollbar">
+                    <div className="absolute top-[calc(100%+8px)] left-0 bg-slate-900/95 border border-slate-700 p-4 rounded-xl shadow-2xl z-[100] flex gap-2 max-w-[80vw] overflow-x-auto animate-fade-in custom-scrollbar">
                       <div className="absolute -top-1.5 left-6 w-3 h-3 bg-slate-900 border-t border-l border-slate-700 rotate-45" />
                       {discardHistoryCards.slice().reverse().map((c, i) => (
-                        <div key={`hist-${c.id}`} className="flex justify-between items-center px-2 py-1.5 bg-slate-800/50 rounded text-xs font-bold border border-slate-700/50 relative z-10">
-                          <span className="text-slate-200">{c.rank}</span>
-                          <span className={`${c.suit === 'hearts' || c.suit === 'diamonds' ? 'text-rose-500' : 'text-slate-400'}`}>
-                            {c.suit === 'hearts' ? '♥' : c.suit === 'diamonds' ? '♦' : c.suit === 'clubs' ? '♣' : c.suit === 'spades' ? '♠' : 'Jok'}
-                          </span>
+                        <div key={`hist-${c.id}`} className="shrink-0 transform transition-transform hover:-translate-y-2 cursor-pointer">
+                          <CardVisual card={getCardWithDynamicWildState(c)} size="sm" />
                         </div>
                       ))}
                     </div>
@@ -1272,7 +1305,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                     <div className="w-16 h-24 lg:w-24 lg:h-36 relative hover:scale-105 transition-transform duration-200">
                       <div className="absolute top-0 left-0 flex items-center gap-2 transform scale-[0.66] origin-top-left lg:scale-100 lg:origin-center">
                         <CardVisual 
-                          card={topDiscardCard} 
+                          card={getCardWithDynamicWildState(topDiscardCard)} 
                           onClick={() => isMyTurn && !isWinnerDeclared && handleDraw('discard')} 
                         />
                       </div>
@@ -1306,16 +1339,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         {/* ACTIVE HAND PLAYER ROWS */}
         {game.status === 'playing' || ((game.status === 'round_finished' || game.status === 'finished') && hideRoundSummary) ? (
           <div className="flex flex-col gap-2 shrink-0 z-20">
-            {(() => {
-              const currentHandGroupsCards = localGroups.map(grp => myHandCards.filter(c => grp.includes(c.id)));
-              const currentBreakdown = calculateDetailedScoreBreakdown(currentHandGroupsCards, game.wildCardRank, game.wildCardSuit);
-              const currentPenalty = currentBreakdown.penaltyPoints;
-              return (
-                <span className="text-[10px] font-mono text-white/90 uppercase tracking-widest font-extrabold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-505 animate-pulse" /> Cards in Hand ({myHandCards.length}) - Current Points: {currentPenalty}
-                </span>
-              );
-            })()}
+            <span className="text-[10px] font-mono text-white/90 uppercase tracking-widest font-extrabold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-505 animate-pulse" /> Cards in Hand ({myHandCards.length}) - Current Points: {currentBreakdown.penaltyPoints}
+            </span>
             
             <div className="flex flex-col items-center justify-center gap-1 md:gap-4 shrink-0 pb-2 z-20">
               <div id="hand-groups-container" className="flex flex-row items-center justify-center flex-wrap gap-x-0.5 lg:gap-x-6 gap-y-2 lg:gap-y-12 pb-1 pt-1 px-0.5 lg:px-2 bg-transparent w-full">
@@ -1323,22 +1349,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   const grpCards = myHandCards.filter(c => grp.includes(c.id));
                   if (grpCards.length === 0) return null;
 
-                  // Evaluate if pure sequence, impure sequence, or set
-                  const isPure = isValidPureSequence(grpCards);
-                  const isImpure = isValidImpureSequence(grpCards);
-                  const isSetMeld = isValidSet(grpCards);
-                  let label = "INVALID";
-                  let isSuccess = false;
-                  if (isPure) {
-                    label = "Pure Sequence";
-                    isSuccess = true;
-                  } else if (isImpure) {
-                    label = "Sequence";
-                    isSuccess = true;
-                  } else if (isSetMeld) {
-                    label = "Set";
-                    isSuccess = true;
-                  }
+                  const meld = currentBreakdown.melds[grpIdx];
+                  const isWarning = meld?.description?.includes('Required') || meld?.description?.includes('Need');
+                  const isSuccess = meld?.type !== 'unmelded';
+                  const label = meld?.description || "INVALID";
 
                   return (
                     <React.Fragment key={`grp-${grpIdx}`}>
@@ -1359,13 +1373,19 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                       className="flex flex-col items-center gap-1 relative shrink-0"
                     >
                       <div className="flex flex-row items-center pb-1 pt-2">
+                        <AnimatePresence>
                         {grpCards.map((c, idx) => {
                           const isSelected = selectedCardIds.includes(c.id);
                           const isLastSelected = selectedCardIds.length > 0 && selectedCardIds[selectedCardIds.length - 1] === c.id;
                           
                           return (
-                            <div 
+                            <motion.div 
                               key={c.id} 
+                              layoutId={`card-${c.id}`}
+                              initial={{ opacity: 0, scale: 0.5, y: -40 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.5, y: -20 }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                               data-card-id={c.id}
                               data-group-idx={grpIdx}
                               draggable={!hasViewerDeclared}
@@ -1398,7 +1418,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                                 }}
                             >
                               <CardVisual
-                                card={c}
+                                card={getCardWithDynamicWildState(c)}
                                 size="sm"
                                 isSelected={isSelected}
                                 onClick={() => !isWinnerDeclared && handleCardClick(c.id)}
@@ -1435,18 +1455,21 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                                   )}
                                 </div>
                               )}
-                            </div>
+                            </motion.div>
                           );
                         })}
+                        </AnimatePresence>
                       </div>
                       
-                      <div className="flex items-center justify-center gap-1 text-[10px] sm:text-xs font-sans font-bold tracking-wide select-none drop-shadow-md">
+                      <div className="flex items-center justify-center gap-1 text-[10px] sm:text-xs font-sans font-bold tracking-wide select-none drop-shadow-md text-center max-w-[150px] leading-tight mx-auto mt-1">
                         {isSuccess ? (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400 drop-shadow shadow-black fill-emerald-950" />
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400 drop-shadow shadow-black fill-emerald-950 shrink-0" />
+                        ) : isWarning ? (
+                          <AlertCircle className="w-3 h-3 text-amber-500 drop-shadow shadow-black shrink-0" />
                         ) : (
-                          <X className="w-3 h-3 text-rose-500 drop-shadow shadow-black" />
+                          <X className="w-3 h-3 text-rose-500 drop-shadow shadow-black shrink-0" />
                         )}
-                        <span className={isSuccess ? "text-emerald-100 drop-shadow-sm" : "text-rose-400 drop-shadow-sm"}>
+                        <span className={isSuccess ? "text-emerald-100 drop-shadow-sm" : isWarning ? "text-amber-400 drop-shadow-sm" : "text-rose-400 drop-shadow-sm"}>
                           {label}
                         </span>
                       </div>
@@ -1582,7 +1605,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                             groups.push(ungrouped);
                           }
 
-                          const breakdown = calculateDetailedScoreBreakdown(groups, game.wildCardRank, game.wildCardSuit);
+                          const breakdown = calculateDetailedScoreBreakdown(groups, game.wildCardRank, game.wildCardSuit, true, game.gameType);
                           const isDeclarantWinner = p.id === game.winnerPlayerId;
                           const currentPoints = isDeclarantWinner ? 0 : breakdown.penaltyPoints;
 
@@ -1711,7 +1734,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   groups.push(ungrouped);
                 }
 
-                const breakdown = calculateDetailedScoreBreakdown(groups, game.wildCardRank, game.wildCardSuit);
+                const breakdown = calculateDetailedScoreBreakdown(groups, game.wildCardRank, game.wildCardSuit, true, game.gameType);
                 const isDeclarantWinner = p.id === game.winnerPlayerId;
                 const finalPenalty = isDeclarantWinner ? 0 : breakdown.penaltyPoints;
                 const finalNetScore = isDeclarantWinner ? breakdown.totalPointsEarned : breakdown.netScore;
@@ -1755,7 +1778,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                                           const isWild = c.rank === game.wildCardRank || c.suit === 'joker' || c.rank === 'joker' || c.isWild || c.isHiddenWild;
                                           return (
                                             <div key={c.id} className="relative group">
-                                              <CardVisual card={c} size="sm" />
+                                              <CardVisual card={getCardWithDynamicWildState(c)} size="sm" />
                                               {isWild && (
                                                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-yellow-500/95 text-slate-950 font-black font-mono text-[7px] px-1 py-0.2 rounded-full shadow border border-slate-950 whitespace-nowrap">
                                                   WILD (0pts)
@@ -1789,7 +1812,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                                           const isWild = c.rank === game.wildCardRank || c.suit === 'joker' || c.rank === 'joker' || c.isWild || c.isHiddenWild;
                                           return (
                                             <div key={c.id} className="relative group">
-                                              <CardVisual card={c} size="sm" />
+                                              <CardVisual card={getCardWithDynamicWildState(c)} size="sm" />
                                               {isWild && (
                                                 <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-yellow-500/95 text-slate-950 font-black font-mono text-[7px] px-1 py-0.2 rounded-full shadow border border-slate-950 whitespace-nowrap">
                                                   WILD (0pts)
@@ -1847,7 +1870,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   const verifierCards = cards.filter(c => handIds.includes(c.id));
                   return verifierCards.map((c, i) => (
                     <div key={i} className="animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
-                      <CardVisual card={c} size="md" />
+                      <CardVisual card={getCardWithDynamicWildState(c)} size="md" />
                     </div>
                   ));
                 })()}
@@ -1892,10 +1915,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                   const grpCards = grpIds.map(id => cards.find(c => c.id === id)).filter(Boolean) as CardType[];
                   if (grpCards.length === 0) return null;
                   return (
-                    <div key={idx} className="flex flex-row flex-wrap gap-1 items-center bg-slate-900/50 p-2 rounded-lg border border-slate-800/50">
+                    <div key={idx} className="flex flex-row flex-wrap gap-3 items-center bg-slate-900/50 p-2 rounded-lg border border-slate-800/50">
                       {grpCards.map(c => (
-                        <div key={c.id} className="transform scale-75 origin-left -mr-4">
-                          <CardVisual card={c} size="sm" />
+                        <div key={c.id} className="hover:-translate-y-4 transition-transform cursor-pointer">
+                          <CardVisual card={getCardWithDynamicWildState(c)} size="md" />
                         </div>
                       ))}
                     </div>

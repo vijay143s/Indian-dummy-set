@@ -1,6 +1,6 @@
 import React from 'react';
 import { CardType } from '../types.ts';
-import { Heart, Diamond, Club, Spade, HelpCircle, Star } from 'lucide-react';
+import { Heart, Diamond, Club, Spade, HelpCircle, Star, Crown, Gem, Sword } from 'lucide-react';
 
 interface CardVisualProps {
   card: CardType;
@@ -14,7 +14,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({ card, isSelected = false
   const isPlaceholder = card.suit === 'wildcard_placeholder';
 
   // Determine colors based on suits
-  const isRed = ['hearts', 'diamonds'].includes(card.suit);
+  const isRed = card.suit === 'hearts' || card.suit === 'diamonds';
 
   // Map suits to icons
   const renderSuitIcon = (suit: string, className: string) => {
@@ -30,6 +30,23 @@ export const CardVisual: React.FC<CardVisualProps> = ({ card, isSelected = false
       default:
         return <HelpCircle className={className} />;
     }
+  };
+
+  const renderCentralEmblem = () => {
+    if (card.suit === 'joker' || card.rank === 'joker') {
+      return (
+         <div className="flex flex-col items-center">
+           <span className={`${size === 'sm' ? 'text-3xl' : 'text-5xl'} leading-none grayscale`}>🃏</span>
+           <span className={`${size === 'sm' ? 'text-[7px]' : 'text-[9px]'} font-mono tracking-widest uppercase mt-1 text-black font-extrabold`}>Joker</span>
+         </div>
+      );
+    }
+    
+    if (card.rank === 'K') return <Crown className={`${size === 'sm' ? 'w-6 h-6' : 'w-10 h-10'} fill-current`} />;
+    if (card.rank === 'Q') return <Gem className={`${size === 'sm' ? 'w-6 h-6' : 'w-10 h-10'} fill-current`} />;
+    if (card.rank === 'J') return <Sword className={`${size === 'sm' ? 'w-6 h-6' : 'w-10 h-10'} fill-current`} />;
+    
+    return renderSuitIcon(card.suit, size === 'sm' ? 'w-6 h-6' : (size === 'lg' ? 'w-12 h-12' : 'w-10 h-10'));
   };
 
   const sizeClasses = {
@@ -75,10 +92,10 @@ export const CardVisual: React.FC<CardVisualProps> = ({ card, isSelected = false
     <div
       onClick={onClick}
       id={`card-${card.id}`}
-      className={`relative ${sizeClasses[size]} select-none flex flex-col justify-between bg-white border border-slate-400 text-slate-900 overflow-hidden shadow-[-4px_0px_8px_rgba(0,0,0,0.25)] cursor-pointer transition-all duration-200 ${
+      className={`relative ${sizeClasses[size]} select-none flex flex-col justify-between bg-white border border-slate-400 overflow-hidden shadow-[-4px_0px_8px_rgba(0,0,0,0.25)] cursor-pointer transition-all duration-200 ${
         size === 'sm' ? 'p-1' : 'p-2 border-2'
       } ${
-        isRed ? 'text-rose-600' : 'text-slate-905'
+        isRed ? 'text-red-600' : 'text-black'
       } ${
         isSelected 
           ? 'ring-2 ring-indigo-500 -translate-y-4 shadow-[0_10px_20px_rgba(0,0,0,0.4)] z-10 scale-105' 
@@ -93,14 +110,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({ card, isSelected = false
 
       {/* Central Emblem */}
       <div className="flex items-center justify-center self-center my-auto shrink-0">
-        {card.suit === 'joker' ? (
-          <div className="flex flex-col items-center">
-            <Star className={`${size === 'sm' ? 'w-5 h-5' : 'w-8 h-8'} text-amber-500 animate-spin-slow`} />
-            <span className={`${size === 'sm' ? 'text-[7px]' : 'text-[9px]'} font-mono tracking-widest uppercase mt-0.5 text-amber-600 font-extrabold`}>Joker</span>
-          </div>
-        ) : (
-          renderSuitIcon(card.suit, size === 'sm' ? 'w-5 h-5' : (size === 'lg' ? 'w-10 h-10' : 'w-8 h-8'))
-        )}
+        {renderCentralEmblem()}
       </div>
 
       {/* Wildcard Overlays */}

@@ -116,7 +116,7 @@ async function startServer() {
           // Wildcard slot card is completely hidden from everyone except its owner (the claimant),
           // until the round is over.
           if (cardCopy.location === 'wildcard_slot') {
-            if (gameRaw.status === 'finished' || gameRaw.status === 'round_finished') {
+            if (gameRaw.status === 'finished' || gameRaw.status === 'round_finished' || gameRaw.gameType === 'rummy') {
               return cardCopy; // fully revealed
             }
             if (cardCopy.ownerPlayerId === viewerId) {
@@ -446,6 +446,19 @@ async function startServer() {
             // Open discard
             const openCard = await drawCardFromDeck(gId, dealerId);
             await discardCard(gId, dealerId, openCard.id);
+
+            // In Rummy, draw a random card to be the global wildcard
+            if (game.gameType === 'rummy') {
+              const wildCardObj = await drawCardFromDeck(gId, dealerId);
+              await db.update(cards)
+                .set({ location: 'wildcard_slot', ownerPlayerId: null })
+                .where(eq(cards.id, wildCardObj.id));
+
+              await updateGame(gId, {
+                wildCardRank: wildCardObj.rank,
+                wildCardSuit: wildCardObj.suit
+              });
+            }
 
             await computeAndBroadcastGameState(gId);
           }, 5000);
@@ -931,7 +944,7 @@ async function startServer() {
             return { ...cardObj, isWild: isPaperJoker };
           }));
 
-          const validation = validateDeclareGroups(groupedCards, isWildcardClaimant, game.gameType);
+          const validation = validateDeclareGroups(groupedCards, isWildcardClaimant, game.gameType, game.wildCardRank);
 
           if (!validation.isValid) {
             // Wrong declare! Apply 80 points penalty, but game continues!
