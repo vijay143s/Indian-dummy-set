@@ -46,6 +46,7 @@ export interface GameType {
   gameAmount: number;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
+  isWildcardSelected?: boolean;
 }
 
 export interface WildCardClaimType {

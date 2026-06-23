@@ -67,6 +67,8 @@ async function startServer() {
       const recentEvents = await getRecentGameEvents(gameId, 15);
       
       const rScores = await db.select().from(roundScores).where(eq(roundScores.gameId, gameId));
+      const completedClaims = await db.select().from(wildCardClaims).where(and(eq(wildCardClaims.gameId, gameId), eq(wildCardClaims.status, 'completed')));
+      const approvedClaimantIds = new Set(completedClaims.map(c => c.claimantPlayerId));
 
       // We broadcast to individual connected players or all in the room
       const roomName = `game_${gameId}`;
@@ -88,7 +90,7 @@ async function startServer() {
 
         // Find the wildcard slot card to determine who the claimant was (the owner)
         const wcCard = allCards.find(c => c.location === 'wildcard_slot');
-        const isWildcardClaimant = wcCard ? wcCard.ownerPlayerId === viewerId : false;
+        const isWildcardClaimant = (wcCard && wcCard.ownerPlayerId === viewerId) || (viewerId !== null && approvedClaimantIds.has(viewerId));
 
         // Apply Card Visibility Safeguards:
         // 1. Normal hand cards are visible ONLY to their owner.
@@ -173,7 +175,7 @@ async function startServer() {
           return cardCopy;
         });
 
-        const gameCopy = { ...gameRaw };
+        const gameCopy = { ...gameRaw, isWildcardSelected: !!gameRaw.wildCardRank };
         
         // Mask the global wildcard rank from non-claimants until the round ends
         if (gameRaw.status !== 'finished' && gameRaw.status !== 'round_finished') {
@@ -762,9 +764,7 @@ async function startServer() {
           return callback({ error: "Game is not active." });
         }
 
-        if (game.wildCardRank) {
-          return callback({ error: "The game already has a wild card selected." });
-        }
+
 
         // Active claim?
         const existingClaim = await getActiveClaim(gId);
@@ -776,7 +776,7 @@ async function startServer() {
         if (!data.cardIds || data.cardIds.length !== 4) {
           return callback({ error: "Must submit exactly 4 cards." });
         }
-        if (!data.deckCardId) {
+        if (!game.wildCardRank && (!data.deckCardId || data.deckCardId === -1)) {
           return callback({ error: "Must select a deck card." });
         }
 

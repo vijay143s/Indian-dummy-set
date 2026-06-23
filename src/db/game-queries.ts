@@ -539,6 +539,23 @@ export async function processWildCardClaim(claimId: number, verifierPlayerId: nu
 
     // If approved, instantly complete and set wildcard
     if (approve) {
+      const game = await getGameById(c.gameId);
+      
+      // If the wildcard is already established, just mark the claim as completed
+      // and skip drawing a new card from the deck!
+      if (game && game.wildCardRank) {
+        await db.update(wildCardClaims)
+          .set({ status: 'completed', cardRank: `${game.wildCardRank}:${game.wildCardSuit}` })
+          .where(eq(wildCardClaims.id, claimId));
+
+        await saveGameEvent(c.gameId, verifierPlayerId, 'wildcard_selected', {
+          claimantPlayerId: c.claimantPlayerId,
+          cardRank: game.wildCardRank,
+          suit: game.wildCardSuit
+        });
+        return true;
+      }
+
       const payload = c.cardIds as any;
       const targetDeckCardId = payload.deck;
 

@@ -310,10 +310,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 
   // Submit 4 same rank cards group for next player approval
   const handleClaimWildCard = () => {
-    if (game.wildCardRank) {
-      setActionError("The wild card for this game has already been selected.");
-      return;
-    }
+
     if (myHandCards.length !== 13) {
       setActionError("To claim a wild card, you must have exactly 13 cards in your hand (before drawing or after discarding).");
       return;
@@ -343,6 +340,18 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     
     if (!allSameRank) {
       setActionError("To claim a wild card, your 4 cards must all have the exact same rank (e.g. four 3s).");
+      return;
+    }
+    
+    if (game.isWildcardSelected) {
+      onEmit("requestWildCardClaim", { cardIds: groupOfFourIds, deckCardId: -1 }, (resp: any) => {
+        if (resp && resp.error) {
+          setActionError(resp.error);
+        } else {
+          setSelectedCardIds([]); 
+          setSuccessInfo("Wildcard claim submitted successfully for verification.");
+        }
+      });
       return;
     }
     
